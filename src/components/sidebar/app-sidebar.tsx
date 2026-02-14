@@ -14,7 +14,6 @@ import {
   ChevronRight,
   FilePlus,
   Dumbbell,
-  LayoutDashboard,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -244,17 +243,13 @@ export function AppSidebar() {
       <SidebarContent>
         {/* Gym */}
         <SidebarGroup>
-          <SidebarGroupLabel>
-            <Dumbbell className="mr-2 h-4 w-4" />
-            Gym
-          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={pathname === "/gym"}>
                   <a href="/gym">
-                    <LayoutDashboard className="h-4 w-4" />
-                    <span>Dashboard</span>
+                    <Dumbbell className="h-4 w-4" />
+                    <span>Gym</span>
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>
