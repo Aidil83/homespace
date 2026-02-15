@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import {
   WEEKLY_SCHEDULE,
   getWorkoutForDate,
@@ -178,20 +178,17 @@ function computeStats(attendance: Set<string>): GymStats {
 // --- Hook ---
 
 export function useGymStorage() {
-  const [attendance, setAttendance] = useState<Set<string>>(() => {
-    const data = loadFromStorage();
-    return new Set(data.attendance);
-  });
+  const [attendance, setAttendance] = useState<Set<string>>(new Set());
+  const [logs, setLogs] = useState<Record<string, ExerciseLogEntry[]>>({});
+  const [goals, setGoals] = useState<Record<string, ExerciseGoal>>({});
 
-  const [logs, setLogs] = useState<Record<string, ExerciseLogEntry[]>>(() => {
+  // Hydrate from localStorage after mount to avoid SSR mismatch
+  useEffect(() => {
     const data = loadFromStorage();
-    return data.logs;
-  });
-
-  const [goals, setGoals] = useState<Record<string, ExerciseGoal>>(() => {
-    const data = loadFromStorage();
-    return data.goals;
-  });
+    setAttendance(new Set(data.attendance));
+    setLogs(data.logs);
+    setGoals(data.goals);
+  }, []);
 
   const persist = useCallback(
     (
