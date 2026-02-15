@@ -8,6 +8,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { getWorkoutForDate } from "./workout-data";
+import { toDateStr } from "@/hooks/use-gym-storage";
 
 interface GymHeatmapProps {
   attendance: Set<string>;
@@ -17,13 +18,6 @@ interface GymHeatmapProps {
 interface DayCell {
   date: Date;
   dateStr: string;
-}
-
-function toDateStr(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
 }
 
 function generateWeeks(): DayCell[][] {
@@ -61,17 +55,25 @@ function getMonthLabels(
   weeks: DayCell[][]
 ): { label: string; colIndex: number }[] {
   const labels: { label: string; colIndex: number }[] = [];
-  let lastMonth = -1;
+  const seen = new Set<string>();
 
   for (let wi = 0; wi < weeks.length; wi++) {
-    const firstDay = weeks[wi][0];
-    const month = firstDay.date.getMonth();
-    if (month !== lastMonth) {
-      labels.push({
-        label: firstDay.date.toLocaleString("default", { month: "short" }),
-        colIndex: wi,
-      });
-      lastMonth = month;
+    for (const day of weeks[wi]) {
+      // Place label at the week containing the 1st of each month
+      if (day.date.getDate() === 1) {
+        const key = `${day.date.getFullYear()}-${day.date.getMonth()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        // Skip if too close to previous label (< 3 columns apart)
+        if (labels.length > 0 && wi - labels[labels.length - 1].colIndex < 3) {
+          continue;
+        }
+        labels.push({
+          label: day.date.toLocaleString("default", { month: "short" }),
+          colIndex: wi,
+        });
+        break;
+      }
     }
   }
 
@@ -166,18 +168,6 @@ export function GymHeatmap({ attendance, onToggle }: GymHeatmapProps) {
               </div>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* Legend — outside scrollable area so it's always visible */}
-      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        <div className="flex items-center gap-1.5">
-          <div className="h-[12px] w-[12px] rounded-[2px] bg-muted" />
-          <span>Missed</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="h-[12px] w-[12px] rounded-[2px] bg-green-500 dark:bg-green-600" />
-          <span>Completed</span>
         </div>
       </div>
     </div>

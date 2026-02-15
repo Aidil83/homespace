@@ -4,6 +4,7 @@ export interface Exercise {
   name: string;
   sets: number;
   reps: string;
+  weightIncrement: number; // 10 for barbell, 5 for dumbbell/cable/machine
 }
 
 export interface WorkoutDay {
@@ -15,7 +16,7 @@ export interface WorkoutDay {
 
 // Fixed weekly schedule
 // JS: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
-const WEEKLY_SCHEDULE: Record<number, WorkoutType> = {
+export const WEEKLY_SCHEDULE: Record<number, WorkoutType> = {
   0: "pull", // Sunday
   1: "legs", // Monday
   2: "rest", // Tuesday
@@ -31,12 +32,10 @@ const WORKOUTS: Record<WorkoutType, WorkoutDay> = {
     label: "Push Day",
     emoji: "🏋️",
     exercises: [
-      { name: "Bench Press", sets: 4, reps: "6-8" },
-      { name: "Overhead Press", sets: 3, reps: "8-10" },
-      { name: "Incline Dumbbell Press", sets: 3, reps: "8-12" },
-      { name: "Lateral Raises", sets: 3, reps: "12-15" },
-      { name: "Tricep Pushdowns", sets: 3, reps: "10-12" },
-      { name: "Overhead Tricep Extension", sets: 3, reps: "10-12" },
+      { name: "Bench Press", sets: 2, reps: "6-8", weightIncrement: 10 },
+      { name: "Overhead Press", sets: 2, reps: "8-10", weightIncrement: 10 },
+      { name: "Lateral Raises", sets: 2, reps: "12-15", weightIncrement: 5 },
+      { name: "Tricep Pushdowns", sets: 2, reps: "10-12", weightIncrement: 5 },
     ],
   },
   pull: {
@@ -44,12 +43,12 @@ const WORKOUTS: Record<WorkoutType, WorkoutDay> = {
     label: "Pull Day",
     emoji: "💪",
     exercises: [
-      { name: "Deadlift", sets: 4, reps: "5-6" },
-      { name: "Barbell Rows", sets: 4, reps: "6-8" },
-      { name: "Lat Pulldown", sets: 3, reps: "8-12" },
-      { name: "Face Pulls", sets: 3, reps: "12-15" },
-      { name: "Barbell Curls", sets: 3, reps: "10-12" },
-      { name: "Hammer Curls", sets: 3, reps: "10-12" },
+      { name: "Deadlift", sets: 2, reps: "5-6", weightIncrement: 10 },
+      { name: "Barbell Rows", sets: 2, reps: "6-8", weightIncrement: 10 },
+      { name: "Lat Pulldown", sets: 2, reps: "8-12", weightIncrement: 5 },
+      { name: "Face Pulls", sets: 2, reps: "12-15", weightIncrement: 5 },
+      { name: "Barbell Curls", sets: 2, reps: "10-12", weightIncrement: 10 },
+      { name: "Hammer Curls", sets: 2, reps: "10-12", weightIncrement: 5 },
     ],
   },
   legs: {
@@ -57,12 +56,12 @@ const WORKOUTS: Record<WorkoutType, WorkoutDay> = {
     label: "Leg Day",
     emoji: "🦵",
     exercises: [
-      { name: "Squats", sets: 4, reps: "6-8" },
-      { name: "Romanian Deadlift", sets: 3, reps: "8-10" },
-      { name: "Leg Press", sets: 3, reps: "10-12" },
-      { name: "Leg Curls", sets: 3, reps: "10-12" },
-      { name: "Leg Extensions", sets: 3, reps: "10-12" },
-      { name: "Calf Raises", sets: 4, reps: "12-15" },
+      { name: "Squats", sets: 2, reps: "6-8", weightIncrement: 10 },
+      { name: "Romanian Deadlift", sets: 2, reps: "8-10", weightIncrement: 10 },
+      { name: "Leg Press", sets: 2, reps: "10-12", weightIncrement: 10 },
+      { name: "Leg Curls", sets: 2, reps: "10-12", weightIncrement: 5 },
+      { name: "Leg Extensions", sets: 2, reps: "10-12", weightIncrement: 5 },
+      { name: "Calf Raises", sets: 2, reps: "12-15", weightIncrement: 5 },
     ],
   },
   rest: {
@@ -81,4 +80,37 @@ export function getTodayWorkout(): WorkoutDay {
 export function getWorkoutForDate(date: Date): WorkoutDay {
   const dayOfWeek = date.getDay();
   return WORKOUTS[WEEKLY_SCHEDULE[dayOfWeek]];
+}
+
+export interface WeekDay {
+  dayIndex: number;
+  dayName: string;
+  shortDay: string;
+  type: WorkoutType;
+  workout: WorkoutDay;
+}
+
+const DAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export function getWeekSchedule(): WeekDay[] {
+  return Array.from({ length: 7 }, (_, i) => {
+    const type = WEEKLY_SCHEDULE[i];
+    return {
+      dayIndex: i,
+      dayName: DAY_NAMES[i],
+      shortDay: SHORT_DAYS[i],
+      type,
+      workout: WORKOUTS[type],
+    };
+  });
 }
