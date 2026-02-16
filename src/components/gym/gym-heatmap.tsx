@@ -12,7 +12,7 @@ import { toDateStr } from "@/hooks/use-gym-storage";
 
 interface GymHeatmapProps {
   attendance: Set<string>;
-  onToggle: (dateStr: string) => void;
+  onDayClick: (dateStr: string) => void;
 }
 
 interface DayCell {
@@ -80,7 +80,7 @@ function getMonthLabels(
   return labels;
 }
 
-export function GymHeatmap({ attendance, onToggle }: GymHeatmapProps) {
+export function GymHeatmap({ attendance, onDayClick }: GymHeatmapProps) {
   const todayStr = useMemo(() => toDateStr(new Date()), []);
   const currentYear = new Date().getFullYear();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -141,7 +141,7 @@ export function GymHeatmap({ attendance, onToggle }: GymHeatmapProps) {
                       <TooltipTrigger asChild>
                         <button
                           onClick={() =>
-                            !isFuture && !isRest && onToggle(day.dateStr)
+                            !isFuture && !isRest && onDayClick(day.dateStr)
                           }
                           disabled={isFuture || isRest}
                           className={cn(

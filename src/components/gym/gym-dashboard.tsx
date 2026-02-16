@@ -11,6 +11,9 @@ import { GymStats } from "./gym-stats";
 export function GymDashboard() {
   const router = useRouter();
   const { attendance, stats, toggleAttendance } = useGymStorage();
+  const handleDayClick = (dateStr: string) => {
+    router.push(`/gym/log?date=${dateStr}`);
+  };
   const todayStr = toDateStr(new Date());
 
   return (
@@ -23,7 +26,7 @@ export function GymDashboard() {
           onToggle={() => toggleAttendance(todayStr)}
           onNavigateToLog={() => router.push("/gym/log")}
         />
-        <GymHeatmap attendance={attendance} onToggle={toggleAttendance} />
+        <GymHeatmap attendance={attendance} onDayClick={handleDayClick} />
         <GymStats stats={stats} />
       </div>
     </TooltipProvider>

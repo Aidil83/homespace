@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { getTodayWorkout, type Exercise } from "./workout-data";
+import { getWorkoutForDate, type Exercise } from "./workout-data";
 import { Button } from "@/components/ui/button";
 import {
   useGymStorage,
@@ -21,11 +21,16 @@ import { E1RMTrendChart } from "./e1rm-trend-chart";
 import { SmartSuggestion } from "./smart-suggestion";
 import { ExerciseCard } from "./exercise-card";
 
-export function WorkoutLog() {
+interface WorkoutLogProps {
+  date?: string; // YYYY-MM-DD, defaults to today
+}
+
+export function WorkoutLog({ date }: WorkoutLogProps) {
   const router = useRouter();
-  const workout = getTodayWorkout();
-  const todayStr = toDateStr(new Date());
-  const dayName = new Date().toLocaleDateString("en-US", { weekday: "long" });
+  const targetDate = date ? new Date(date + "T00:00:00") : new Date();
+  const dateStr = toDateStr(targetDate);
+  const workout = getWorkoutForDate(targetDate);
+  const dayName = targetDate.toLocaleDateString("en-US", { weekday: "long" });
   const {
     getLog,
     getPreviousLog,
@@ -42,8 +47,8 @@ export function WorkoutLog() {
   const autoSaveRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const previousLog = useMemo(
-    () => getPreviousLog(todayStr),
-    [getPreviousLog, todayStr]
+    () => getPreviousLog(dateStr),
+    [getPreviousLog, dateStr]
   );
 
   const previousByExercise = useMemo(() => {
@@ -65,7 +70,7 @@ export function WorkoutLog() {
 
   // Pre-fill from today's saved log, or from previous session, or empty
   useEffect(() => {
-    const saved = getLog(todayStr);
+    const saved = getLog(dateStr);
     if (saved && saved.length > 0) {
       setEntries(saved);
     } else {
@@ -83,7 +88,7 @@ export function WorkoutLog() {
         })
       );
     }
-  }, [todayStr, getLog, workout.exercises, previousByExercise]);
+  }, [dateStr, getLog, workout.exercises, previousByExercise]);
 
   // Primary exercise data (first exercise)
   const primaryExercise = workout.exercises[0];
@@ -134,11 +139,11 @@ export function WorkoutLog() {
       if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
       autoSaveRef.current = setTimeout(() => {
         if (nextEntries.length > 0) {
-          saveLog(todayStr, nextEntries);
+          saveLog(dateStr, nextEntries);
         }
       }, 500);
     },
-    [saveLog, todayStr]
+    [saveLog, dateStr]
   );
 
   function updateSetField(
@@ -206,8 +211,8 @@ export function WorkoutLog() {
 
   function handleFinish() {
     if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
-    saveLog(todayStr, entries);
-    markAttended(todayStr);
+    saveLog(dateStr, entries);
+    markAttended(dateStr);
     router.push("/gym");
   }
 
@@ -223,7 +228,7 @@ export function WorkoutLog() {
       {/* Header */}
       <LogHeader
         dayName={dayName}
-        dateStr={todayStr}
+        dateStr={dateStr}
         splitLabel={workout.label}
         splitEmoji={workout.emoji}
         streak={stats.currentStreak}
