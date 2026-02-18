@@ -35,6 +35,7 @@ interface GymStorageData {
   attendance: string[]; // serialized Set
   logs: Record<string, ExerciseLogEntry[]>;
   goals: Record<string, ExerciseGoal>;
+  notes: Record<string, string>;
 }
 
 // --- Utilities ---
@@ -79,18 +80,19 @@ function migrateLogs(
 }
 
 function loadFromStorage(): GymStorageData {
-  if (typeof window === "undefined") return { attendance: [], logs: {}, goals: {} };
+  if (typeof window === "undefined") return { attendance: [], logs: {}, goals: {}, notes: {} };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { attendance: [], logs: {}, goals: {} };
+    if (!raw) return { attendance: [], logs: {}, goals: {}, notes: {} };
     const parsed = JSON.parse(raw);
     return {
       attendance: parsed.attendance || [],
       logs: migrateLogs(parsed.logs || {}),
       goals: parsed.goals || {},
+      notes: parsed.notes || {},
     };
   } catch {
-    return { attendance: [], logs: {}, goals: {} };
+    return { attendance: [], logs: {}, goals: {}, notes: {} };
   }
 }
 
@@ -181,6 +183,7 @@ export function useGymStorage() {
   const [attendance, setAttendance] = useState<Set<string>>(new Set());
   const [logs, setLogs] = useState<Record<string, ExerciseLogEntry[]>>({});
   const [goals, setGoals] = useState<Record<string, ExerciseGoal>>({});
+  const [notes, setNotes] = useState<Record<string, string>>({});
 
   // Hydrate from localStorage after mount to avoid SSR mismatch
   useEffect(() => {
@@ -188,18 +191,21 @@ export function useGymStorage() {
     setAttendance(new Set(data.attendance));
     setLogs(data.logs);
     setGoals(data.goals);
+    setNotes(data.notes);
   }, []);
 
   const persist = useCallback(
     (
       nextAttendance: Set<string>,
       nextLogs: Record<string, ExerciseLogEntry[]>,
-      nextGoals: Record<string, ExerciseGoal>
+      nextGoals: Record<string, ExerciseGoal>,
+      nextNotes: Record<string, string>
     ) => {
       saveToStorage({
         attendance: Array.from(nextAttendance),
         logs: nextLogs,
         goals: nextGoals,
+        notes: nextNotes,
       });
     },
     []
@@ -216,7 +222,10 @@ export function useGymStorage() {
         }
         setLogs((prevLogs) => {
           setGoals((prevGoals) => {
-            persist(next, prevLogs, prevGoals);
+            setNotes((prevNotes) => {
+              persist(next, prevLogs, prevGoals, prevNotes);
+              return prevNotes;
+            });
             return prevGoals;
           });
           return prevLogs;
@@ -235,7 +244,10 @@ export function useGymStorage() {
         next.add(dateStr);
         setLogs((prevLogs) => {
           setGoals((prevGoals) => {
-            persist(next, prevLogs, prevGoals);
+            setNotes((prevNotes) => {
+              persist(next, prevLogs, prevGoals, prevNotes);
+              return prevNotes;
+            });
             return prevGoals;
           });
           return prevLogs;
@@ -252,7 +264,10 @@ export function useGymStorage() {
         const next = { ...prev, [dateStr]: entries };
         setAttendance((prevAttendance) => {
           setGoals((prevGoals) => {
-            persist(prevAttendance, next, prevGoals);
+            setNotes((prevNotes) => {
+              persist(prevAttendance, next, prevGoals, prevNotes);
+              return prevNotes;
+            });
             return prevGoals;
           });
           return prevAttendance;
@@ -269,7 +284,35 @@ export function useGymStorage() {
         const next = { ...prev, [exerciseName]: { target1RM } };
         setAttendance((prevAttendance) => {
           setLogs((prevLogs) => {
-            persist(prevAttendance, prevLogs, next);
+            setNotes((prevNotes) => {
+              persist(prevAttendance, prevLogs, next, prevNotes);
+              return prevNotes;
+            });
+            return prevLogs;
+          });
+          return prevAttendance;
+        });
+        return next;
+      });
+    },
+    [persist]
+  );
+
+  const getNote = useCallback(
+    (dateStr: string): string => notes[dateStr] ?? "",
+    [notes]
+  );
+
+  const saveNote = useCallback(
+    (dateStr: string, text: string) => {
+      setNotes((prev) => {
+        const next = { ...prev, [dateStr]: text };
+        setAttendance((prevAttendance) => {
+          setLogs((prevLogs) => {
+            setGoals((prevGoals) => {
+              persist(prevAttendance, prevLogs, prevGoals, next);
+              return prevGoals;
+            });
             return prevLogs;
           });
           return prevAttendance;
@@ -330,6 +373,7 @@ export function useGymStorage() {
     attendance,
     logs,
     goals,
+    notes,
     stats,
     toggleAttendance,
     markAttended,
@@ -338,5 +382,7 @@ export function useGymStorage() {
     getPreviousLog,
     setGoal,
     getAllLogsForExercise,
+    getNote,
+    saveNote,
   };
 }

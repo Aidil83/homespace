@@ -2,12 +2,17 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { WorkoutLog } from "@/components/gym/workout-log";
+import dynamic from "next/dynamic";
+
+const GymQuestWorkoutLog = dynamic(
+  () => import("@/components/gym/gymquest-workout-log").then((m) => m.GymQuestWorkoutLog),
+  { ssr: false }
+);
 
 function WorkoutLogWithParams() {
   const searchParams = useSearchParams();
   const date = searchParams.get("date") ?? undefined;
-  return <WorkoutLog date={date} />;
+  return <GymQuestWorkoutLog date={date} />;
 }
 
 export default function GymLogPage() {

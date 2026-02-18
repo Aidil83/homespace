@@ -141,9 +141,9 @@ export function GymHeatmap({ attendance, onDayClick }: GymHeatmapProps) {
                       <TooltipTrigger asChild>
                         <button
                           onClick={() =>
-                            !isFuture && !isRest && onDayClick(day.dateStr)
+                            !isFuture && onDayClick(day.dateStr)
                           }
-                          disabled={isFuture || isRest}
+                          disabled={isFuture}
                           className={cn(
                             "h-[12px] w-[12px] rounded-[2px] transition-colors",
                             attended
@@ -152,7 +152,6 @@ export function GymHeatmap({ attendance, onDayClick }: GymHeatmapProps) {
                             isToday && "ring-1 ring-foreground/40",
                             isFuture && "opacity-30",
                             !isFuture &&
-                              !isRest &&
                               !attended &&
                               "hover:bg-muted-foreground/20"
                           )}

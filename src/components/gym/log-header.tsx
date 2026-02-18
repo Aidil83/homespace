@@ -12,45 +12,60 @@ interface LogHeaderProps {
   completedSets: number;
   totalSets: number;
   onBack: () => void;
+  splitDayNumber?: number;
+  splitTotalDays?: number;
+  muscleGroupSummary?: string;
 }
 
 export function LogHeader({
   dayName,
   dateStr,
   splitLabel,
-  splitEmoji,
   streak,
-  completedSets,
-  totalSets,
   onBack,
+  splitDayNumber,
+  splitTotalDays,
+  muscleGroupSummary,
 }: LogHeaderProps) {
   const formattedDate = new Date(dateStr + "T00:00:00").toLocaleDateString(
     "en-US",
-    { month: "short", day: "numeric" }
+    { month: "long", day: "numeric" }
   );
 
   return (
-    <div className="flex items-center gap-3">
-      <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0">
+    <div className="flex items-start gap-3">
+      <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0 mt-1">
         <ArrowLeft className="h-5 w-5" />
       </Button>
-      <span className="text-3xl">{splitEmoji}</span>
       <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-purple-400 mb-0.5">
+          GymQuest
+        </p>
         <h1 className="text-2xl font-bold">{splitLabel}</h1>
         <p className="text-sm text-muted-foreground">
           {dayName}, {formattedDate}
         </p>
       </div>
-      <div className="flex items-center gap-3 shrink-0">
+      <div className="flex flex-col items-end gap-1.5 shrink-0">
+        {splitDayNumber != null && splitTotalDays != null && (
+          <div className="rounded-lg bg-purple-500/15 px-3 py-1.5 text-center">
+            <p className="text-[9px] font-bold uppercase tracking-wider text-purple-400">
+              Split
+            </p>
+            <p className="text-base font-bold">
+              Day {splitDayNumber}/{splitTotalDays}
+            </p>
+          </div>
+        )}
+        {muscleGroupSummary && (
+          <span className="text-xs text-muted-foreground">{muscleGroupSummary}</span>
+        )}
         {streak > 0 && (
           <div className="flex items-center gap-1 rounded-full bg-orange-500/10 px-3 py-1">
             <Flame className="h-4 w-4 text-orange-500" />
             <span className="text-sm font-semibold text-orange-500">{streak}</span>
           </div>
         )}
-        <span className="text-sm text-muted-foreground">
-          {completedSets}/{totalSets} sets
-        </span>
       </div>
     </div>
   );
