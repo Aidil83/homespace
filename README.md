@@ -1,36 +1,113 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Homespace
+
+A personal productivity app combining a Notion-like page editor with a gym workout tracker. Built with Next.js 15, TypeScript, and Tailwind CSS v4.
+
+## Tech Stack
+
+- **Framework**: Next.js 15 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS v4, shadcn/ui
+- **Auth**: Supabase SSR
+- **Database**: PostgreSQL via Prisma ORM
+- **Editor**: BlockNote (rich text blocks)
+- **Drawing**: tldraw (freehand canvas)
+- **Theming**: next-themes (dark/light mode)
+- **PWA**: Serwist service worker
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+# Install dependencies
+npm install
+
+# Set up environment variables
+cp .env.example .env.local
+# Fill in Supabase and database credentials
+
+# Run database migrations
+npx prisma migrate dev
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) to view the app.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Features
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Pages & Editor
 
-## Learn More
+- Create, edit, and delete pages with a rich text editor (BlockNote)
+- Auto-saving content with debounce
+- Inline page title editing with real-time sidebar sync
+- Page emoji/icons with a picker (96 emojis, 6 categories)
+- Nested sub-pages with breadcrumb navigation
+- tldraw drawing blocks embedded in pages with auto-save
+- Collapsible sidebar with recursive page tree
 
-To learn more about Next.js, take a look at the following resources:
+### Dark Mode
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- System-aware theme toggle in sidebar
+- Synced across BlockNote editor, tldraw canvas, and all UI components
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### GymQuest Workout Tracker
 
-## Deploy on Vercel
+A full-featured gym tracker at `/gym` with a custom GymQuest-styled UI.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**Dashboard** (`/gym`):
+- Workout stats (total sessions, current streak, weekly count)
+- Contribution heatmap with clickable day navigation
+- Weekly schedule overview (Push/Pull/Legs split)
+- Today's workout preview
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**Workout Log** (`/gym/log`):
+- GymQuest-branded header with split day badge and muscle group summary
+- This Week strip with 7 clickable day cards showing attendance status
+- Goal hero card with horizontal progress bar and collapsible Candy Land serpentine roadmap
+- 1RM trend chart tracking estimated one-rep max over time
+- Smart weight/rep suggestions based on previous sessions
+- Exercise cards with weight and rep steppers (5 lb increments)
+- Live estimated 1RM display below each set (Epley formula)
+- Click any stepper value to reset to exercise defaults
+- Per-exercise default weights and reps (Bench 135/8, Deadlift 225/5, Squat 95/5, etc.)
+- Rest timers after completing sets
+- Session insights comparing current vs previous performance
+- Session notes with auto-save
+- All data persisted to localStorage
+
+**Workout Schedule**:
+- Fixed weekly PPL split: Sun (Pull), Mon (Legs), Tue (Rest), Wed (Push), Thu (Pull), Fri (Legs), Sat (Push)
+- 2 sets per exercise across all splits
+
+## Project Structure
+
+```
+src/
+  app/
+    (main)/
+      [pageId]/        # Dynamic page view
+      gym/             # Gym dashboard
+      gym/log/         # Workout log
+    api/               # REST API routes
+    auth/              # Auth callback
+  components/
+    editor/            # BlockNote editor
+    drawing/           # tldraw canvas
+    sidebar/           # App sidebar
+    gym/               # Gym tracker components
+    ui/                # shadcn/ui components
+  hooks/               # Custom hooks (gym storage, etc.)
+  lib/                 # Utilities (Supabase client, Prisma, etc.)
+prisma/
+  schema.prisma        # Database schema
+```
+
+## Database Schema
+
+Key models:
+
+- **Page** — id, title, icon, parentId (self-referential for nesting), coverImage, isArchived, sortOrder
+- **Block** — page content blocks (BlockNote JSON)
+- **Drawing** — tldraw canvas state per page
+
+Gym data is stored in localStorage (no server-side persistence).
