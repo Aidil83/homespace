@@ -41,29 +41,29 @@ interface DayTemplate {
 }
 
 const defaultCategories: Category[] = [
-  { id: "work", label: "Work (Financial Services)", hours: 45, color: "#4F8EF7", icon: "💼" },
-  { id: "gym", label: "Gym (PPL 6x/wk)", hours: 9, color: "#F97066", icon: "🏋️" },
-  { id: "sleep", label: "Sleep", hours: 49, color: "#7C6EF6", icon: "😴" },
-  { id: "coding", label: "Side Projects / GymQuest", hours: 10, color: "#34D399", icon: "💻" },
-  { id: "leetcode", label: "LeetCode / Interview Prep", hours: 5, color: "#FBBF24", icon: "🧩" },
-  { id: "commute", label: "Commute / Driving", hours: 5, color: "#A78BFA", icon: "🚗" },
-  { id: "meals", label: "Meals & Cooking", hours: 7, color: "#FB923C", icon: "🍳" },
-  { id: "chores", label: "Chores / Errands", hours: 4, color: "#94A3B8", icon: "🧹" },
-  { id: "social", label: "Social / Dating", hours: 5, color: "#F472B6", icon: "👋" },
-  { id: "downtime", label: "Free Time / Recharge", hours: 0, color: "#2DD4BF", icon: "🎮" },
+  { id: "work", label: "Work (Financial Services)", hours: 40, color: "#4F8EF7", icon: "💼" },
+  { id: "gym", label: "Gym (PPL 6x/wk)", hours: 5, color: "#F97066", icon: "🏋️" },
+  { id: "sleep", label: "Sleep", hours: 56, color: "#7C6EF6", icon: "😴" },
+  { id: "coding", label: "Side Projects / GymQuest", hours: 18, color: "#34D399", icon: "💻" },
+  { id: "leetcode", label: "LeetCode / Interview Prep", hours: 9, color: "#FBBF24", icon: "🧩" },
+  { id: "commute", label: "Commute / Driving", hours: 3, color: "#A78BFA", icon: "🚗" },
+  { id: "meals", label: "Meals & Cooking", hours: 9, color: "#FB923C", icon: "🍳" },
+  { id: "chores", label: "Chores / Errands", hours: 5, color: "#94A3B8", icon: "🧹" },
+  { id: "social", label: "Social / Dating", hours: 3, color: "#F472B6", icon: "👋" },
+  { id: "downtime", label: "Free Time / Recharge", hours: 15, color: "#2DD4BF", icon: "🎮" },
 ];
 
 const idealCategories = [
-  { id: "work", hours: 45 },
-  { id: "gym", hours: 9 },
-  { id: "sleep", hours: 52.5 },
-  { id: "coding", hours: 8 },
-  { id: "leetcode", hours: 4 },
-  { id: "commute", hours: 5 },
-  { id: "meals", hours: 7 },
-  { id: "chores", hours: 4 },
-  { id: "social", hours: 6 },
-  { id: "downtime", hours: 14 },
+  { id: "work", hours: 40 },
+  { id: "gym", hours: 5 },
+  { id: "sleep", hours: 56 },
+  { id: "coding", hours: 18 },
+  { id: "leetcode", hours: 9 },
+  { id: "commute", hours: 3 },
+  { id: "meals", hours: 9 },
+  { id: "chores", hours: 5 },
+  { id: "social", hours: 3 },
+  { id: "downtime", hours: 15 },
 ];
 
 const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
