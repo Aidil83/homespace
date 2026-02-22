@@ -1021,7 +1021,7 @@ function ThisWeekStrip({
                 fontWeight: 600,
                 color: isActive ? "#fff" : "#94a3b8",
               }}>
-                {w.type === "rest" ? "Rest" : w.type.charAt(0).toUpperCase() + w.type.slice(1)}
+                {w.type === "rest" ? "Rest" : "FB"}
               </span>
               {attended && (
                 <div style={{

@@ -7,14 +7,17 @@ import { WeeklySchedule } from "./weekly-schedule";
 import { TodayWorkout } from "./today-workout";
 import { GymHeatmap } from "./gym-heatmap";
 import { GymStats } from "./gym-stats";
+import { GymDashboardSkeleton } from "./gym-dashboard-skeleton";
 
 export function GymDashboard() {
   const router = useRouter();
-  const { attendance, stats, toggleAttendance } = useGymStorage();
+  const { hydrated, attendance, stats, toggleAttendance } = useGymStorage();
   const handleDayClick = (dateStr: string) => {
     router.push(`/gym/log?date=${dateStr}`);
   };
   const todayStr = toDateStr(new Date());
+
+  if (!hydrated) return <GymDashboardSkeleton />;
 
   return (
     <TooltipProvider>

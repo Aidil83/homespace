@@ -1,4 +1,4 @@
-export type WorkoutType = "push" | "pull" | "legs" | "rest";
+export type WorkoutType = "fullbody" | "rest";
 
 export interface Exercise {
   name: string;
@@ -20,57 +20,35 @@ export interface WorkoutDay {
 // Fixed weekly schedule
 // JS: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat
 export const WEEKLY_SCHEDULE: Record<number, WorkoutType> = {
-  0: "pull", // Sunday
-  1: "legs", // Monday
-  2: "rest", // Tuesday
-  3: "push", // Wednesday
-  4: "pull", // Thursday
-  5: "legs", // Friday
-  6: "push", // Saturday
+  0: "rest",      // Sunday
+  1: "fullbody",  // Monday
+  2: "rest",      // Tuesday
+  3: "fullbody",  // Wednesday
+  4: "rest",      // Thursday
+  5: "fullbody",  // Friday
+  6: "rest",      // Saturday
 };
 
 const WORKOUTS: Record<WorkoutType, WorkoutDay> = {
-  push: {
-    type: "push",
-    label: "Push Day",
-    emoji: "✊",
-    exercises: [
-      { name: "Bench Press", sets: 2, reps: "6-8", weightIncrement: 5, defaultWeight: 135, defaultReps: 8, muscles: ["Chest", "Front Delts", "Triceps"] },
-      { name: "Overhead Press", sets: 2, reps: "8-10", weightIncrement: 5, defaultWeight: 65, defaultReps: 8, muscles: ["Shoulders", "Triceps"] },
-      { name: "Lateral Raises", sets: 2, reps: "12-15", weightIncrement: 5, defaultWeight: 15, defaultReps: 12, muscles: ["Side Delts"] },
-      { name: "Tricep Pushdowns", sets: 2, reps: "10-12", weightIncrement: 5, defaultWeight: 40, defaultReps: 10, muscles: ["Triceps"] },
-    ],
-  },
-  pull: {
-    type: "pull",
-    label: "Pull Day",
+  fullbody: {
+    type: "fullbody",
+    label: "Full Body",
     emoji: "💪",
     exercises: [
-      { name: "Deadlift", sets: 2, reps: "5-6", weightIncrement: 5, defaultWeight: 225, defaultReps: 5, muscles: ["Back", "Hamstrings", "Glutes"] },
-      { name: "Barbell Rows", sets: 2, reps: "6-8", weightIncrement: 5, defaultWeight: 95, defaultReps: 8, muscles: ["Back", "Lats", "Biceps"] },
-      { name: "Lat Pulldown", sets: 2, reps: "8-12", weightIncrement: 5, defaultWeight: 80, defaultReps: 10, muscles: ["Lats", "Biceps"] },
-      { name: "Face Pulls", sets: 2, reps: "12-15", weightIncrement: 5, defaultWeight: 30, defaultReps: 12, muscles: ["Rear Delts", "Traps"] },
-      { name: "Barbell Curls", sets: 2, reps: "10-12", weightIncrement: 5, defaultWeight: 45, defaultReps: 10, muscles: ["Biceps", "Forearms"] },
-      { name: "Hammer Curls", sets: 2, reps: "10-12", weightIncrement: 5, defaultWeight: 25, defaultReps: 10, muscles: ["Biceps", "Forearms"] },
-    ],
-  },
-  legs: {
-    type: "legs",
-    label: "Leg Day",
-    emoji: "🏋️",
-    exercises: [
       { name: "Squats", sets: 2, reps: "6-8", weightIncrement: 5, defaultWeight: 95, defaultReps: 5, muscles: ["Quads", "Glutes"] },
+      { name: "Bench Press", sets: 2, reps: "6-8", weightIncrement: 5, defaultWeight: 135, defaultReps: 8, muscles: ["Chest", "Front Delts", "Triceps"] },
+      { name: "Barbell Rows", sets: 2, reps: "6-8", weightIncrement: 5, defaultWeight: 95, defaultReps: 8, muscles: ["Back", "Lats", "Biceps"] },
+      { name: "Overhead Press", sets: 2, reps: "8-10", weightIncrement: 5, defaultWeight: 65, defaultReps: 8, muscles: ["Shoulders", "Triceps"] },
       { name: "Romanian Deadlift", sets: 2, reps: "8-10", weightIncrement: 5, defaultWeight: 95, defaultReps: 8, muscles: ["Hamstrings", "Glutes", "Back"] },
-      { name: "Leg Press", sets: 2, reps: "10-12", weightIncrement: 5, defaultWeight: 135, defaultReps: 10, muscles: ["Quads", "Glutes"] },
-      { name: "Leg Curls", sets: 2, reps: "10-12", weightIncrement: 5, defaultWeight: 60, defaultReps: 10, muscles: ["Hamstrings"] },
-      { name: "Leg Extensions", sets: 2, reps: "10-12", weightIncrement: 5, defaultWeight: 60, defaultReps: 10, muscles: ["Quads"] },
-      { name: "Calf Raises", sets: 2, reps: "12-15", weightIncrement: 5, defaultWeight: 80, defaultReps: 12, muscles: ["Calves"] },
+      { name: "Lat Pulldown", sets: 2, reps: "8-12", weightIncrement: 5, defaultWeight: 80, defaultReps: 10, muscles: ["Lats", "Biceps"] },
+      { name: "Lateral Raises", sets: 2, reps: "12-15", weightIncrement: 5, defaultWeight: 15, defaultReps: 12, muscles: ["Side Delts"] },
+      { name: "Barbell Curls", sets: 2, reps: "10-12", weightIncrement: 5, defaultWeight: 45, defaultReps: 10, muscles: ["Biceps", "Forearms"] },
     ],
   },
   rest: {
     type: "rest",
     label: "Rest Day",
-    emoji: "😴",
+    emoji: "💤",
     exercises: [],
   },
 };
@@ -118,7 +96,7 @@ export function getWeekSchedule(): WeekDay[] {
   });
 }
 
-// Non-rest day indices in the weekly schedule (for SPLIT Day X/6 badge)
+// Non-rest day indices in the weekly schedule (for SPLIT Day X/3 badge)
 const WORKOUT_DAY_ORDER = Object.entries(WEEKLY_SCHEDULE)
   .filter(([, type]) => type !== "rest")
   .map(([idx]) => Number(idx));
@@ -133,9 +111,7 @@ export function getSplitDayInfo(
 }
 
 const MUSCLE_SUMMARIES: Record<WorkoutType, string> = {
-  push: "Chest & Triceps",
-  pull: "Back & Biceps",
-  legs: "Quads & Hamstrings",
+  fullbody: "Full Body",
   rest: "",
 };
 

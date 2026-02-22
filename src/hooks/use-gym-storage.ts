@@ -184,6 +184,7 @@ export function useGymStorage() {
   const [logs, setLogs] = useState<Record<string, ExerciseLogEntry[]>>({});
   const [goals, setGoals] = useState<Record<string, ExerciseGoal>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [hydrated, setHydrated] = useState(false);
 
   // Hydrate from localStorage after mount to avoid SSR mismatch
   useEffect(() => {
@@ -192,6 +193,7 @@ export function useGymStorage() {
     setLogs(data.logs);
     setGoals(data.goals);
     setNotes(data.notes);
+    setHydrated(true);
   }, []);
 
   const persist = useCallback(
@@ -370,6 +372,7 @@ export function useGymStorage() {
   const stats = useMemo(() => computeStats(attendance), [attendance]);
 
   return {
+    hydrated,
     attendance,
     logs,
     goals,
