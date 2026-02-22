@@ -1,0 +1,107 @@
+[
+  {
+    "name": "Arrays & Hashing",
+    "slug": "arrays-hashing",
+    "description": "Fundamental array manipulation and hash map techniques",
+    "icon": "Hash",
+    "sortOrder": 1
+  },
+  {
+    "name": "Two Pointers",
+    "slug": "two-pointers",
+    "description": "Using two pointers to traverse arrays efficiently",
+    "icon": "ArrowLeftRight",
+    "sortOrder": 2
+  },
+  {
+    "name": "Sliding Window",
+    "slug": "sliding-window",
+    "description": "Maintaining a window of elements for substring and subarray problems",
+    "icon": "PanelLeft",
+    "sortOrder": 3
+  },
+  {
+    "name": "Stack",
+    "slug": "stack",
+    "description": "Last-in-first-out data structure problems",
+    "icon": "Layers",
+    "sortOrder": 4
+  },
+  {
+    "name": "Binary Search",
+    "slug": "binary-search",
+    "description": "Efficiently searching sorted data by halving the search space",
+    "icon": "Search",
+    "sortOrder": 5
+  },
+  {
+    "name": "Linked List",
+    "slug": "linked-list",
+    "description": "Pointer-based list manipulation and traversal",
+    "icon": "Link",
+    "sortOrder": 6
+  },
+  {
+    "name": "Trees",
+    "slug": "trees",
+    "description": "Binary trees, BSTs, and tree traversal algorithms",
+    "icon": "TreePine",
+    "sortOrder": 7
+  },
+  {
+    "name": "Graphs",
+    "slug": "graphs",
+    "description": "Graph traversal, shortest paths, and connectivity",
+    "icon": "GitBranch",
+    "sortOrder": 8
+  },
+  {
+    "name": "Dynamic Programming",
+    "slug": "dynamic-programming",
+    "description": "Breaking problems into overlapping subproblems",
+    "icon": "Grid3x3",
+    "sortOrder": 9
+  },
+  {
+    "name": "Backtracking",
+    "slug": "backtracking",
+    "description": "Exploring all possibilities with pruning",
+    "icon": "Undo2",
+    "sortOrder": 10
+  },
+  {
+    "name": "Heap / Priority Queue",
+    "slug": "heap",
+    "description": "Efficiently finding min/max elements",
+    "icon": "Triangle",
+    "sortOrder": 11
+  },
+  {
+    "name": "Greedy",
+    "slug": "greedy",
+    "description": "Making locally optimal choices for global solutions",
+    "icon": "Zap",
+    "sortOrder": 12
+  },
+  {
+    "name": "Intervals",
+    "slug": "intervals",
+    "description": "Merging, inserting, and scheduling interval problems",
+    "icon": "Calendar",
+    "sortOrder": 13
+  },
+  {
+    "name": "Bit Manipulation",
+    "slug": "bit-manipulation",
+    "description": "Working with binary representations of numbers",
+    "icon": "Binary",
+    "sortOrder": 14
+  },
+  {
+    "name": "Tries",
+    "slug": "tries",
+    "description": "Prefix tree for efficient string operations",
+    "icon": "FileTree",
+    "sortOrder": 15
+  }
+]

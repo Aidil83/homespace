@@ -15,6 +15,7 @@
     "@blocknote/mantine": "^0.46.2",
     "@blocknote/react": "^0.46.2",
     "@blocknote/shadcn": "^0.46.2",
+    "@monaco-editor/react": "^4.7.0",
     "@prisma/adapter-pg": "^7.4.0",
     "@prisma/client": "^7.4.0",
     "@serwist/next": "^9.5.5",
@@ -30,7 +31,10 @@
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-markdown": "^10.1.0",
+    "react-resizable-panels": "^4.6.5",
     "recharts": "^3.7.0",
+    "remark-gfm": "^4.0.1",
     "serwist": "^9.5.5",
     "tailwind-merge": "^3.4.0",
     "tldraw": "^4.3.1"

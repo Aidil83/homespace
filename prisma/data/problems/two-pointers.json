@@ -1,0 +1,165 @@
+[
+  {
+    "title": "Valid Palindrome",
+    "slug": "valid-palindrome",
+    "difficulty": "easy",
+    "description": "A phrase is a palindrome if, after converting all uppercase letters to lowercase and removing all non-alphanumeric characters, it reads the same forward and backward.\n\nGiven a string `s`, return `true` if it is a palindrome, or `false` otherwise.",
+    "examples": [
+      {
+        "input": "s = \"A man, a plan, a canal: Panama\"",
+        "output": "true",
+        "explanation": "After cleaning: \"amanaplanacanalpanama\" is a palindrome."
+      },
+      {
+        "input": "s = \"race a car\"",
+        "output": "false",
+        "explanation": "After cleaning: \"raceacar\" is not a palindrome."
+      },
+      {
+        "input": "s = \" \"",
+        "output": "true",
+        "explanation": "After removing non-alphanumeric characters, s is an empty string."
+      }
+    ],
+    "constraints": [
+      "1 <= s.length <= 2 * 10^5",
+      "s consists only of printable ASCII characters."
+    ],
+    "starterCode": {
+      "python": "class Solution:\n    def isPalindrome(self, s: str) -> bool:\n        pass"
+    },
+    "testCases": [
+      { "input": ["A man, a plan, a canal: Panama"], "expectedOutput": true, "isHidden": false },
+      { "input": ["race a car"], "expectedOutput": false, "isHidden": false },
+      { "input": [" "], "expectedOutput": true, "isHidden": false },
+      { "input": ["ab"], "expectedOutput": false, "isHidden": true },
+      { "input": ["aa"], "expectedOutput": true, "isHidden": true }
+    ],
+    "hints": [
+      "Use two pointers, one at the start and one at the end.",
+      "Skip non-alphanumeric characters and compare lowercase versions."
+    ],
+    "functionName": "isPalindrome",
+    "sortOrder": 1
+  },
+  {
+    "title": "Two Sum II - Sorted Array",
+    "slug": "two-sum-ii",
+    "difficulty": "medium",
+    "description": "Given a 1-indexed array of integers `numbers` that is already sorted in non-decreasing order, find two numbers such that they add up to a specific `target` number.\n\nReturn the indices of the two numbers (1-indexed) as an integer array `[index1, index2]`.\n\nYou may not use the same element twice. Your solution must use only constant extra space.",
+    "examples": [
+      {
+        "input": "numbers = [2, 7, 11, 15], target = 9",
+        "output": "[1, 2]",
+        "explanation": "The sum of 2 and 7 is 9. Their indices are 1 and 2."
+      },
+      {
+        "input": "numbers = [2, 3, 4], target = 6",
+        "output": "[1, 3]"
+      },
+      {
+        "input": "numbers = [-1, 0], target = -1",
+        "output": "[1, 2]"
+      }
+    ],
+    "constraints": [
+      "2 <= numbers.length <= 3 * 10^4",
+      "-1000 <= numbers[i] <= 1000",
+      "numbers is sorted in non-decreasing order.",
+      "Only one solution exists."
+    ],
+    "starterCode": {
+      "python": "class Solution:\n    def twoSum(self, numbers: list[int], target: int) -> list[int]:\n        pass"
+    },
+    "testCases": [
+      { "input": [[2, 7, 11, 15], 9], "expectedOutput": [1, 2], "isHidden": false },
+      { "input": [[2, 3, 4], 6], "expectedOutput": [1, 3], "isHidden": false },
+      { "input": [[-1, 0], -1], "expectedOutput": [1, 2], "isHidden": false },
+      { "input": [[1, 2, 3, 4, 5], 9], "expectedOutput": [4, 5], "isHidden": true }
+    ],
+    "hints": [
+      "Since the array is sorted, two pointers can help you narrow down the search.",
+      "If the sum is too big, move the right pointer left. If too small, move the left pointer right."
+    ],
+    "functionName": "twoSum",
+    "sortOrder": 2
+  },
+  {
+    "title": "3Sum",
+    "slug": "three-sum",
+    "difficulty": "medium",
+    "description": "Given an integer array `nums`, return all the triplets `[nums[i], nums[j], nums[k]]` such that `i != j`, `i != k`, and `j != k`, and `nums[i] + nums[j] + nums[k] == 0`.\n\nThe solution set must not contain duplicate triplets.",
+    "examples": [
+      {
+        "input": "nums = [-1, 0, 1, 2, -1, -4]",
+        "output": "[[-1, -1, 2], [-1, 0, 1]]",
+        "explanation": "The distinct triplets that sum to zero are [-1, -1, 2] and [-1, 0, 1]."
+      },
+      {
+        "input": "nums = [0, 1, 1]",
+        "output": "[]",
+        "explanation": "No triplet sums to 0."
+      },
+      {
+        "input": "nums = [0, 0, 0]",
+        "output": "[[0, 0, 0]]"
+      }
+    ],
+    "constraints": [
+      "3 <= nums.length <= 3000",
+      "-10^5 <= nums[i] <= 10^5"
+    ],
+    "starterCode": {
+      "python": "class Solution:\n    def threeSum(self, nums: list[int]) -> list[list[int]]:\n        pass"
+    },
+    "testCases": [
+      { "input": [[-1, 0, 1, 2, -1, -4]], "expectedOutput": [[-1, -1, 2], [-1, 0, 1]], "isHidden": false },
+      { "input": [[0, 1, 1]], "expectedOutput": [], "isHidden": false },
+      { "input": [[0, 0, 0]], "expectedOutput": [[0, 0, 0]], "isHidden": false },
+      { "input": [[-2, 0, 1, 1, 2]], "expectedOutput": [[-2, 0, 2], [-2, 1, 1]], "isHidden": true }
+    ],
+    "hints": [
+      "Sort the array first, then fix one element and use two pointers for the remaining two.",
+      "Skip duplicate values to avoid duplicate triplets in the result."
+    ],
+    "functionName": "threeSum",
+    "sortOrder": 3
+  },
+  {
+    "title": "Container With Most Water",
+    "slug": "container-with-most-water",
+    "difficulty": "medium",
+    "description": "You are given an integer array `height` of length `n`. There are `n` vertical lines drawn such that the two endpoints of the `i`th line are `(i, 0)` and `(i, height[i])`.\n\nFind two lines that together with the x-axis form a container that holds the most water.\n\nReturn the maximum amount of water a container can store.\n\nYou may not slant the container.",
+    "examples": [
+      {
+        "input": "height = [1, 8, 6, 2, 5, 4, 8, 3, 7]",
+        "output": "49",
+        "explanation": "The lines at index 1 (height 8) and index 8 (height 7) form the container with the most water: min(8, 7) * (8 - 1) = 49."
+      },
+      {
+        "input": "height = [1, 1]",
+        "output": "1"
+      }
+    ],
+    "constraints": [
+      "n == height.length",
+      "2 <= n <= 10^5",
+      "0 <= height[i] <= 10^4"
+    ],
+    "starterCode": {
+      "python": "class Solution:\n    def maxArea(self, height: list[int]) -> int:\n        pass"
+    },
+    "testCases": [
+      { "input": [[1, 8, 6, 2, 5, 4, 8, 3, 7]], "expectedOutput": 49, "isHidden": false },
+      { "input": [[1, 1]], "expectedOutput": 1, "isHidden": false },
+      { "input": [[4, 3, 2, 1, 4]], "expectedOutput": 16, "isHidden": true },
+      { "input": [[1, 2, 1]], "expectedOutput": 2, "isHidden": true }
+    ],
+    "hints": [
+      "Start with the widest container (left and right pointers at the edges).",
+      "Move the pointer pointing to the shorter line inward — the only way to potentially increase area."
+    ],
+    "functionName": "maxArea",
+    "sortOrder": 4
+  }
+]

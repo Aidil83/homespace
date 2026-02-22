@@ -16,6 +16,7 @@ import {
   FilePlus,
   Dumbbell,
   Clock,
+  Code,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -260,6 +261,14 @@ export function AppSidebar() {
                   <Link href="/routine">
                     <Clock className="h-4 w-4" />
                     <span>Routine</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname.startsWith("/dsa")}>
+                  <Link href="/dsa">
+                    <Code className="h-4 w-4" />
+                    <span>DSA</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

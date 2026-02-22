@@ -1,0 +1,200 @@
+[
+  {
+    "title": "Contains Duplicate",
+    "slug": "contains-duplicate",
+    "difficulty": "easy",
+    "description": "Given an integer array `nums`, return `true` if any value appears at least twice in the array, and return `false` if every element is distinct.",
+    "examples": [
+      {
+        "input": "nums = [1, 2, 3, 1]",
+        "output": "true",
+        "explanation": "The element 1 occurs at indices 0 and 3."
+      },
+      {
+        "input": "nums = [1, 2, 3, 4]",
+        "output": "false",
+        "explanation": "All elements are distinct."
+      },
+      {
+        "input": "nums = [1, 1, 1, 3, 3, 4, 3, 2, 4, 2]",
+        "output": "true"
+      }
+    ],
+    "constraints": [
+      "1 <= nums.length <= 10^5",
+      "-10^9 <= nums[i] <= 10^9"
+    ],
+    "starterCode": {
+      "python": "class Solution:\n    def containsDuplicate(self, nums: list[int]) -> bool:\n        pass"
+    },
+    "testCases": [
+      { "input": [[1, 2, 3, 1]], "expectedOutput": true, "isHidden": false },
+      { "input": [[1, 2, 3, 4]], "expectedOutput": false, "isHidden": false },
+      { "input": [[1, 1, 1, 3, 3, 4, 3, 2, 4, 2]], "expectedOutput": true, "isHidden": false },
+      { "input": [[]], "expectedOutput": false, "isHidden": true },
+      { "input": [[1]], "expectedOutput": false, "isHidden": true }
+    ],
+    "hints": [
+      "Think about what data structure allows O(1) lookups.",
+      "A set can track which elements you've already seen."
+    ],
+    "functionName": "containsDuplicate",
+    "sortOrder": 1
+  },
+  {
+    "title": "Valid Anagram",
+    "slug": "valid-anagram",
+    "difficulty": "easy",
+    "description": "Given two strings `s` and `t`, return `true` if `t` is an anagram of `s`, and `false` otherwise.\n\nAn anagram is a word formed by rearranging the letters of another word, using all the original letters exactly once.",
+    "examples": [
+      {
+        "input": "s = \"anagram\", t = \"nagaram\"",
+        "output": "true"
+      },
+      {
+        "input": "s = \"rat\", t = \"car\"",
+        "output": "false"
+      }
+    ],
+    "constraints": [
+      "1 <= s.length, t.length <= 5 * 10^4",
+      "s and t consist of lowercase English letters."
+    ],
+    "starterCode": {
+      "python": "class Solution:\n    def isAnagram(self, s: str, t: str) -> bool:\n        pass"
+    },
+    "testCases": [
+      { "input": ["anagram", "nagaram"], "expectedOutput": true, "isHidden": false },
+      { "input": ["rat", "car"], "expectedOutput": false, "isHidden": false },
+      { "input": ["a", "a"], "expectedOutput": true, "isHidden": true },
+      { "input": ["ab", "ba"], "expectedOutput": true, "isHidden": true },
+      { "input": ["ab", "a"], "expectedOutput": false, "isHidden": true }
+    ],
+    "hints": [
+      "What if you count the frequency of each character?",
+      "Compare character counts between both strings using a hash map or Counter."
+    ],
+    "functionName": "isAnagram",
+    "sortOrder": 2
+  },
+  {
+    "title": "Two Sum",
+    "slug": "two-sum",
+    "difficulty": "easy",
+    "description": "Given an array of integers `nums` and an integer `target`, return the indices of the two numbers that add up to `target`.\n\nYou may assume that each input has exactly one solution, and you may not use the same element twice.\n\nYou can return the answer in any order.",
+    "examples": [
+      {
+        "input": "nums = [2, 7, 11, 15], target = 9",
+        "output": "[0, 1]",
+        "explanation": "Because nums[0] + nums[1] == 9, we return [0, 1]."
+      },
+      {
+        "input": "nums = [3, 2, 4], target = 6",
+        "output": "[1, 2]"
+      },
+      {
+        "input": "nums = [3, 3], target = 6",
+        "output": "[0, 1]"
+      }
+    ],
+    "constraints": [
+      "2 <= nums.length <= 10^4",
+      "-10^9 <= nums[i] <= 10^9",
+      "-10^9 <= target <= 10^9",
+      "Only one valid answer exists."
+    ],
+    "starterCode": {
+      "python": "class Solution:\n    def twoSum(self, nums: list[int], target: int) -> list[int]:\n        pass"
+    },
+    "testCases": [
+      { "input": [[2, 7, 11, 15], 9], "expectedOutput": [0, 1], "isHidden": false },
+      { "input": [[3, 2, 4], 6], "expectedOutput": [1, 2], "isHidden": false },
+      { "input": [[3, 3], 6], "expectedOutput": [0, 1], "isHidden": false },
+      { "input": [[1, 5, 3, 7], 8], "expectedOutput": [1, 2], "isHidden": true },
+      { "input": [[-1, -2, -3, -4], -6], "expectedOutput": [1, 3], "isHidden": true }
+    ],
+    "hints": [
+      "For each number, what complement would you need to reach the target?",
+      "A hash map can store each number's index for O(1) complement lookups."
+    ],
+    "functionName": "twoSum",
+    "sortOrder": 3
+  },
+  {
+    "title": "Group Anagrams",
+    "slug": "group-anagrams",
+    "difficulty": "medium",
+    "description": "Given an array of strings `strs`, group the anagrams together. You can return the answer in any order.",
+    "examples": [
+      {
+        "input": "strs = [\"eat\", \"tea\", \"tan\", \"ate\", \"nat\", \"bat\"]",
+        "output": "[[\"bat\"], [\"nat\", \"tan\"], [\"ate\", \"eat\", \"tea\"]]"
+      },
+      {
+        "input": "strs = [\"\"]",
+        "output": "[[\"\"]]"
+      },
+      {
+        "input": "strs = [\"a\"]",
+        "output": "[[\"a\"]]"
+      }
+    ],
+    "constraints": [
+      "1 <= strs.length <= 10^4",
+      "0 <= strs[i].length <= 100",
+      "strs[i] consists of lowercase English letters."
+    ],
+    "starterCode": {
+      "python": "class Solution:\n    def groupAnagrams(self, strs: list[str]) -> list[list[str]]:\n        pass"
+    },
+    "testCases": [
+      { "input": [["eat", "tea", "tan", "ate", "nat", "bat"]], "expectedOutput": [["bat"], ["nat", "tan"], ["ate", "eat", "tea"]], "isHidden": false },
+      { "input": [[""]], "expectedOutput": [[""]], "isHidden": false },
+      { "input": [["a"]], "expectedOutput": [["a"]], "isHidden": false },
+      { "input": [["abc", "bca", "cab", "xyz", "zyx"]], "expectedOutput": [["abc", "bca", "cab"], ["xyz", "zyx"]], "isHidden": true }
+    ],
+    "hints": [
+      "How can you create a key that is the same for all anagrams of a word?",
+      "Sorting each string gives the same result for all anagrams. Use it as a hash map key."
+    ],
+    "functionName": "groupAnagrams",
+    "sortOrder": 4
+  },
+  {
+    "title": "Top K Frequent Elements",
+    "slug": "top-k-frequent",
+    "difficulty": "medium",
+    "description": "Given an integer array `nums` and an integer `k`, return the `k` most frequent elements. You may return the answer in any order.",
+    "examples": [
+      {
+        "input": "nums = [1, 1, 1, 2, 2, 3], k = 2",
+        "output": "[1, 2]"
+      },
+      {
+        "input": "nums = [1], k = 1",
+        "output": "[1]"
+      }
+    ],
+    "constraints": [
+      "1 <= nums.length <= 10^5",
+      "-10^4 <= nums[i] <= 10^4",
+      "k is in the range [1, number of unique elements]",
+      "The answer is guaranteed to be unique."
+    ],
+    "starterCode": {
+      "python": "class Solution:\n    def topKFrequent(self, nums: list[int], k: int) -> list[int]:\n        pass"
+    },
+    "testCases": [
+      { "input": [[1, 1, 1, 2, 2, 3], 2], "expectedOutput": [1, 2], "isHidden": false },
+      { "input": [[1], 1], "expectedOutput": [1], "isHidden": false },
+      { "input": [[4, 4, 4, 1, 1, 2, 2, 2, 3], 2], "expectedOutput": [4, 2], "isHidden": true },
+      { "input": [[5, 5, 5, 5, 1, 1, 1, 2, 2, 3], 3], "expectedOutput": [5, 1, 2], "isHidden": true }
+    ],
+    "hints": [
+      "Count the frequency of each element first.",
+      "You can use bucket sort where the index represents the frequency."
+    ],
+    "functionName": "topKFrequent",
+    "sortOrder": 5
+  }
+]

@@ -65,3 +65,86 @@ model Drawing {
 
   @@map("drawings")
 }
+
+// ========================================
+// DSA Challenge Platform
+// ========================================
+
+model ProblemCategory {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String    @unique
+  slug        String    @unique
+  description String?
+  icon        String?
+  sortOrder   Int       @default(0) @map("sort_order")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  problems    Problem[]
+
+  @@map("problem_categories")
+}
+
+model Problem {
+  id           String          @id @default(uuid()) @db.Uuid
+  categoryId   String          @map("category_id") @db.Uuid
+  title        String
+  slug         String          @unique
+  difficulty   String
+  description  String
+  examples     Json            @default("[]")
+  constraints  Json            @default("[]")
+  starterCode  Json            @default("{}") @map("starter_code")
+  testCases    Json            @default("[]") @map("test_cases")
+  hints        Json            @default("[]")
+  solutionCode Json?           @map("solution_code")
+  functionName String          @map("function_name")
+  sortOrder    Int             @default(0) @map("sort_order")
+  isPublished  Boolean         @default(true) @map("is_published")
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  category     ProblemCategory @relation(fields: [categoryId], references: [id])
+  submissions  Submission[]
+  userProgress UserProblemProgress[]
+
+  @@map("problems")
+}
+
+model Submission {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  problemId   String   @map("problem_id") @db.Uuid
+  language    String
+  code        String
+  status      String
+  passedTests Int      @default(0) @map("passed_tests")
+  totalTests  Int      @default(0) @map("total_tests")
+  runtime     Int?
+  memory      Int?
+  errorOutput String?  @map("error_output")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  problem     Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@index([userId, problemId])
+  @@index([userId, createdAt])
+  @@map("submissions")
+}
+
+model UserProblemProgress {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  problemId    String    @map("problem_id") @db.Uuid
+  status       String    @default("not_started")
+  attempts     Int       @default(0)
+  lastLanguage String?   @map("last_language")
+  lastCode     String?   @map("last_code")
+  solvedAt     DateTime? @map("solved_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  problem      Problem   @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, problemId])
+  @@index([userId])
+  @@map("user_problem_progress")
+}
