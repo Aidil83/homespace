@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
 import { useTheme } from "next-themes";
 import {
   Plus,
@@ -14,6 +15,7 @@ import {
   ChevronRight,
   FilePlus,
   Dumbbell,
+  Clock,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -247,10 +249,18 @@ export function AppSidebar() {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={pathname === "/gym"}>
-                  <a href="/gym">
+                  <Link href="/gym">
                     <Dumbbell className="h-4 w-4" />
                     <span>Gym</span>
-                  </a>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === "/tempo"}>
+                  <Link href="/tempo">
+                    <Clock className="h-4 w-4" />
+                    <span>Tempo</span>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
