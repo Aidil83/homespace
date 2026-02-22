@@ -256,10 +256,10 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={pathname === "/tempo"}>
-                  <Link href="/tempo">
+                <SidebarMenuButton asChild isActive={pathname === "/routine"}>
+                  <Link href="/routine">
                     <Clock className="h-4 w-4" />
-                    <span>Tempo</span>
+                    <span>Routine</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

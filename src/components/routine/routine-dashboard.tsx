@@ -172,7 +172,7 @@ function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<
   return null;
 }
 
-export function TempoDashboard() {
+export function RoutineDashboard() {
   const [categories, setCategories] = useState<Category[]>(defaultCategories);
   const [activeTab, setActiveTab] = useState("overview");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -356,7 +356,7 @@ export function TempoDashboard() {
               WebkitTextFillColor: "transparent",
             }}
           >
-            Tempo
+            Routine
           </h1>
           <p
             style={{
