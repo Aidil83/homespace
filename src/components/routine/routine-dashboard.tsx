@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   PieChart,
   Pie,
@@ -38,6 +38,125 @@ interface DayBlock {
 interface DayTemplate {
   label: string;
   blocks: DayBlock[];
+}
+
+interface ArcSegment {
+  startAngle: number;
+  endAngle: number;
+  startTime: string;
+  endTime: string;
+  activity: string;
+  cat: string;
+  color: string;
+  icon: string;
+  durationMinutes: number;
+  ring: "am" | "pm" | "sleep";
+}
+
+function timeToMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function to12h(time: string): string {
+  const [h, m] = time.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return m === 0 ? `${h12} ${period}` : `${h12}:${m.toString().padStart(2, "0")} ${period}`;
+}
+
+// Standard 12-hour clock: 12 at top (0°), 3 at right (90°), 6 at bottom (180°), 9 at left (270°)
+function minutesToClockAngle(minutes: number): number {
+  const hourIn12 = (minutes / 60) % 12;
+  return (hourIn12 / 12) * 360;
+}
+
+function isAM(minutes: number): boolean {
+  return minutes < 720; // before noon
+}
+
+function describeArc(
+  cx: number, cy: number,
+  outerR: number, innerR: number,
+  startDeg: number, endDeg: number
+): string {
+  const startRad = ((startDeg - 90) * Math.PI) / 180;
+  const endRad = ((endDeg - 90) * Math.PI) / 180;
+  const sweep = ((endDeg - startDeg) + 360) % 360;
+  const largeArc = sweep > 180 ? 1 : 0;
+
+  const x1o = cx + outerR * Math.cos(startRad);
+  const y1o = cy + outerR * Math.sin(startRad);
+  const x2o = cx + outerR * Math.cos(endRad);
+  const y2o = cy + outerR * Math.sin(endRad);
+  const x1i = cx + innerR * Math.cos(endRad);
+  const y1i = cy + innerR * Math.sin(endRad);
+  const x2i = cx + innerR * Math.cos(startRad);
+  const y2i = cy + innerR * Math.sin(startRad);
+
+  return [
+    `M ${x1o} ${y1o}`,
+    `A ${outerR} ${outerR} 0 ${largeArc} 1 ${x2o} ${y2o}`,
+    `L ${x1i} ${y1i}`,
+    `A ${innerR} ${innerR} 0 ${largeArc} 0 ${x2i} ${y2i}`,
+    `Z`,
+  ].join(" ");
+}
+
+function blocksToArcs(blocks: DayBlock[], cats: Category[]): ArcSegment[] {
+  const arcs: ArcSegment[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    const nextBlock = blocks[(i + 1) % blocks.length];
+    const startMin = timeToMinutes(block.time);
+    let endMin = i === blocks.length - 1
+      ? timeToMinutes(nextBlock.time)
+      : timeToMinutes(nextBlock.time);
+    if (endMin <= startMin) endMin += 1440;
+    const cat = cats.find(c => c.id === block.cat);
+    const isSleep = block.cat === "sleep";
+
+    if (isSleep) {
+      arcs.push({
+        startAngle: minutesToClockAngle(startMin),
+        endAngle: minutesToClockAngle(endMin % 1440),
+        startTime: block.time, endTime: nextBlock.time,
+        activity: block.activity, cat: block.cat,
+        color: cat?.color || "#4B5563", icon: cat?.icon || "",
+        durationMinutes: endMin - startMin, ring: "sleep",
+      });
+    } else if (startMin < 720 && endMin > 720) {
+      // Block crosses noon — split into AM and PM arcs
+      const amCat = cat;
+      arcs.push({
+        startAngle: minutesToClockAngle(startMin),
+        endAngle: minutesToClockAngle(720),
+        startTime: block.time, endTime: "12:00",
+        activity: block.activity, cat: block.cat,
+        color: amCat?.color || "#4B5563", icon: amCat?.icon || "",
+        durationMinutes: 720 - startMin, ring: "am",
+      });
+      arcs.push({
+        startAngle: minutesToClockAngle(720),
+        endAngle: minutesToClockAngle(endMin),
+        startTime: "12:00", endTime: nextBlock.time,
+        activity: block.activity, cat: block.cat,
+        color: amCat?.color || "#4B5563", icon: amCat?.icon || "",
+        durationMinutes: endMin - 720, ring: "pm",
+      });
+    } else {
+      arcs.push({
+        startAngle: minutesToClockAngle(startMin),
+        endAngle: minutesToClockAngle(endMin),
+        startTime: block.time, endTime: nextBlock.time,
+        activity: block.activity, cat: block.cat,
+        color: cat?.color || "#4B5563", icon: cat?.icon || "",
+        durationMinutes: endMin - startMin,
+        ring: isAM(startMin) ? "am" : "pm",
+      });
+    }
+  }
+  return arcs;
 }
 
 const defaultCategories: Category[] = [
@@ -177,6 +296,13 @@ export function RoutineDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState(0);
+  const [hoveredArc, setHoveredArc] = useState<number | null>(null);
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   const totalAllocated = useMemo(
     () => categories.reduce((s, c) => s + c.hours, 0),
@@ -331,6 +457,28 @@ export function RoutineDashboard() {
 
   const dayBlocks = dayTemplates[weekSchedule[selectedDay]].blocks;
 
+  const orbitArcs = useMemo(
+    () => blocksToArcs(dayBlocks, categories),
+    [dayBlocks, categories]
+  );
+
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const currentTimeAngle = minutesToClockAngle(currentMinutes);
+  const currentTimeRad = ((currentTimeAngle - 90) * Math.PI) / 180;
+  const currentIsAM = isAM(currentMinutes);
+  const isSleepTime = currentMinutes >= 1350 || currentMinutes < 360; // 10:30 PM to 6 AM
+  const currentTimeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  const currentArcIndex = orbitArcs.findIndex(arc => {
+    const s = timeToMinutes(arc.startTime);
+    const e = timeToMinutes(arc.endTime);
+    if (e > s) return currentMinutes >= s && currentMinutes < e;
+    return currentMinutes >= s || currentMinutes < e;
+  });
+  const currentArcSegment = currentArcIndex >= 0 ? orbitArcs[currentArcIndex] : undefined;
+
+  const displayArc = hoveredArc !== null ? orbitArcs[hoveredArc] : currentArcSegment;
+
   return (
     <div
       style={{
@@ -471,6 +619,7 @@ export function RoutineDashboard() {
               ["adjust", "Adjust"],
               ["schedule", "Daily Schedule"],
               ["health", "Balance Check"],
+              ["orbit", "Orbit"],
             ] as const
           ).map(([t, l]) => (
             <button key={t} onClick={() => setActiveTab(t)} style={tabStyle(t)}>
@@ -1127,6 +1276,381 @@ export function RoutineDashboard() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ORBIT TAB */}
+        {activeTab === "orbit" && (
+          <>
+            <style>{`
+              @keyframes orbitSegmentIn {
+                0% { opacity: 0; transform: scale(0.3); transform-origin: 200px 200px; }
+                60% { opacity: 0.85; transform: scale(1.04); transform-origin: 200px 200px; }
+                100% { opacity: 1; transform: scale(1); transform-origin: 200px 200px; }
+              }
+              @keyframes orbitHandPulse {
+                0%, 100% { filter: drop-shadow(0 0 4px rgba(255,255,255,0.6)); }
+                50% { filter: drop-shadow(0 0 10px rgba(255,255,255,1)); }
+              }
+              @keyframes orbitGlowPulse {
+                0%, 100% { opacity: 0.08; }
+                50% { opacity: 0.18; }
+              }
+              @keyframes orbitFadeIn {
+                from { opacity: 0; transform: translateY(8px); }
+                to { opacity: 1; transform: translateY(0); }
+              }
+              @keyframes orbitLaser {
+                0%, 100% { opacity: 0.5; stroke-width: 1.5; }
+                50% { opacity: 1; stroke-width: 2.5; }
+              }
+              @keyframes orbitLaserOuter {
+                0%, 100% { opacity: 0; stroke-width: 2; }
+                50% { opacity: 0.3; stroke-width: 6; }
+              }
+            `}</style>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+              {/* Left: Clock */}
+              <div style={{
+                background: "rgba(255,255,255,0.03)",
+                borderRadius: 16,
+                padding: 24,
+                border: "1px solid rgba(255,255,255,0.05)",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+              }}>
+                <div style={{ width: "100%", marginBottom: 12 }}>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "#9CA3AF" }}>
+                    Daily Orbit
+                  </h3>
+                  <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 500 }}>
+                    {dayTemplates[weekSchedule[selectedDay]].label} · {weekdays[selectedDay]}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 4, marginBottom: 16, width: "100%" }}>
+                  {weekdays.map((d, i) => (
+                    <button
+                      key={d}
+                      onClick={() => { setSelectedDay(i); setHoveredArc(null); }}
+                      style={{
+                        flex: 1,
+                        padding: "6px 0",
+                        borderRadius: 8,
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        transition: "all 0.2s",
+                        background: selectedDay === i ? "rgba(79,142,247,0.15)" : "rgba(255,255,255,0.04)",
+                        color: selectedDay === i ? "#4F8EF7" : "#6B7280",
+                      }}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+                <svg viewBox="0 0 400 400" style={{ width: "100%", maxWidth: 380 }}>
+                  <defs>
+                    <filter id="orbitGlow">
+                      <feGaussianBlur stdDeviation="4" result="blur" />
+                      <feMerge>
+                        <feMergeNode in="blur" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
+                    <filter id="orbitLaserGlow" x="-50%" y="-50%" width="200%" height="200%">
+                      <feGaussianBlur stdDeviation="3" result="blur1" />
+                      <feGaussianBlur stdDeviation="8" result="blur2" />
+                      <feMerge>
+                        <feMergeNode in="blur2" />
+                        <feMergeNode in="blur1" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
+                    <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
+                      <stop offset="0%" stopColor="rgba(79,142,247,0.1)" />
+                      <stop offset="100%" stopColor="transparent" />
+                    </radialGradient>
+                  </defs>
+
+                  {/* Center glow */}
+                  <circle cx="200" cy="200" r="100" fill="url(#centerGlow)" style={{ animation: "orbitGlowPulse 4s ease-in-out infinite" }} />
+
+                  {/* Ring guides */}
+                  <circle cx="200" cy="200" r="175" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" />
+                  <circle cx="200" cy="200" r="130" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" />
+
+                  {/* Arc segments — PM outer ring, AM inner ring */}
+                  <g key={selectedDay}>
+                    {orbitArcs.map((arc, i) => {
+                      const startDeg = arc.startAngle + 0.4;
+                      let endDeg = arc.endAngle - 0.4;
+                      if (endDeg < startDeg) endDeg += 360;
+                      let outerR: number, innerR: number;
+                      if (arc.ring === "pm") {
+                        outerR = 174; innerR = 132;
+                      } else if (arc.ring === "am") {
+                        outerR = 128; innerR = 104;
+                      } else {
+                        // sleep — skip rendering on the ring
+                        return null;
+                      }
+                      const isCurrentRing = i === currentArcIndex;
+                      const isHighlighted = hoveredArc === i || isCurrentRing;
+                      const isInactiveHalf = (currentIsAM && arc.ring === "pm") || (!currentIsAM && arc.ring === "am");
+                      const arcOpacity = isHighlighted ? 1 : isInactiveHalf ? 0.15 : 0.7;
+                      return (
+                        <g key={i} style={{ animation: `orbitSegmentIn 0.6s ease-out ${i * 0.06}s both` }}>
+                          <path
+                            d={describeArc(200, 200, outerR, innerR, startDeg, endDeg)}
+                            fill={arc.color}
+                            opacity={arcOpacity}
+                            stroke="#0d0d1a"
+                            strokeWidth="1.5"
+                            style={{
+                              filter: isHighlighted ? "url(#orbitGlow)" : "none",
+                              transition: "opacity 0.2s, filter 0.2s",
+                              cursor: "pointer",
+                            }}
+                            onMouseEnter={() => setHoveredArc(i)}
+                            onMouseLeave={() => setHoveredArc(null)}
+                          />
+                          {isCurrentRing && (() => {
+                            const entryDelay = 0.3 + i * 0.06; // overlap with tail end of segment entry
+                            return (
+                              <>
+                                {/* Laser core — bright tight outline */}
+                                <path
+                                  d={describeArc(200, 200, outerR + 2, innerR - 2, startDeg, endDeg)}
+                                  fill="none"
+                                  stroke={arc.color}
+                                  strokeWidth="2"
+                                  opacity="0"
+                                  style={{ animation: `orbitLaser 2s ease-in-out ${entryDelay}s infinite`, filter: "url(#orbitLaserGlow)" }}
+                                />
+                                {/* Laser bloom — wide soft glow */}
+                                <path
+                                  d={describeArc(200, 200, outerR + 5, innerR - 5, startDeg, endDeg)}
+                                  fill="none"
+                                  stroke={arc.color}
+                                  strokeWidth="4"
+                                  opacity="0"
+                                  style={{ animation: `orbitLaserOuter 2s ease-in-out ${entryDelay}s infinite` }}
+                                />
+                              </>
+                            );
+                          })()}
+                        </g>
+                      );
+                    })}
+                  </g>
+
+                  {/* Hour tick marks — standard 12-hour positions */}
+                  {Array.from({ length: 12 }, (_, i) => {
+                    const deg = (i / 12) * 360;
+                    const angle = ((deg - 90) * Math.PI) / 180;
+                    const isMajor = i % 3 === 0;
+                    const r1 = isMajor ? 176 : 175;
+                    const r2 = isMajor ? 186 : 181;
+                    return (
+                      <line
+                        key={i}
+                        x1={200 + r1 * Math.cos(angle)}
+                        y1={200 + r1 * Math.sin(angle)}
+                        x2={200 + r2 * Math.cos(angle)}
+                        y2={200 + r2 * Math.sin(angle)}
+                        stroke={isMajor ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.15)"}
+                        strokeWidth={isMajor ? 2 : 1}
+                      />
+                    );
+                  })}
+
+                  {/* Hour labels — standard clock: 12 at top, 3 right, 6 bottom, 9 left */}
+                  {([
+                    [0, "12"], [1, "1"], [2, "2"], [3, "3"], [4, "4"], [5, "5"],
+                    [6, "6"], [7, "7"], [8, "8"], [9, "9"], [10, "10"], [11, "11"],
+                  ] as const).map(([pos, label]) => {
+                    const deg = (pos / 12) * 360;
+                    const angle = ((deg - 90) * Math.PI) / 180;
+                    const r = 194;
+                    return (
+                      <text
+                        key={pos}
+                        x={200 + r * Math.cos(angle)}
+                        y={200 + r * Math.sin(angle)}
+                        textAnchor="middle"
+                        dominantBaseline="central"
+                        fill="rgba(255,255,255,0.45)"
+                        fontSize="11"
+                        fontWeight="600"
+                        fontFamily="'DM Sans', sans-serif"
+                      >
+                        {label}
+                      </text>
+                    );
+                  })}
+
+                  {/* Ring labels */}
+                  <text x="200" y="22" textAnchor="middle" fill="#4F8EF7" fontSize="8" fontWeight="700" fontFamily="'DM Sans', sans-serif" opacity="0.6" letterSpacing="1">
+                    PM
+                  </text>
+                  <text x="200" y="80" textAnchor="middle" fill="#9CA3AF" fontSize="8" fontWeight="700" fontFamily="'DM Sans', sans-serif" opacity="0.4" letterSpacing="1">
+                    AM
+                  </text>
+
+                  {/* Current time hand */}
+                  {!isSleepTime && (
+                    <>
+                      <line
+                        x1={200 + (currentIsAM ? 98 : 100) * Math.cos(currentTimeRad)}
+                        y1={200 + (currentIsAM ? 98 : 100) * Math.sin(currentTimeRad)}
+                        x2={200 + (currentIsAM ? 130 : 180) * Math.cos(currentTimeRad)}
+                        y2={200 + (currentIsAM ? 130 : 180) * Math.sin(currentTimeRad)}
+                        stroke="#ffffff"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        style={{ animation: "orbitHandPulse 3s ease-in-out infinite" }}
+                      />
+                      <circle
+                        cx={200 + (currentIsAM ? 130 : 180) * Math.cos(currentTimeRad)}
+                        cy={200 + (currentIsAM ? 130 : 180) * Math.sin(currentTimeRad)}
+                        r="4"
+                        fill="#fff"
+                        style={{ filter: "drop-shadow(0 0 6px rgba(255,255,255,0.8))" }}
+                      />
+                    </>
+                  )}
+
+                  {/* Center info */}
+                  <text x="200" y={hoveredArc !== null ? 180 : 185} textAnchor="middle" fill="#e8e8f0" fontSize="24" fontWeight="700" fontFamily="'DM Sans', sans-serif">
+                    {hoveredArc !== null ? `${orbitArcs[hoveredArc].icon}` : currentTimeStr}
+                  </text>
+                  <text x="200" y={hoveredArc !== null ? 205 : 210} textAnchor="middle" fill={displayArc?.color || "#9CA3AF"} fontSize="12" fontWeight="600" fontFamily="'DM Sans', sans-serif">
+                    {displayArc?.activity || ""}
+                  </text>
+                  <text x="200" y={hoveredArc !== null ? 223 : 228} textAnchor="middle" fill="#6B7280" fontSize="10" fontFamily="'DM Sans', sans-serif">
+                    {displayArc ? `${to12h(displayArc.startTime)} – ${to12h(displayArc.endTime)}` : ""}
+                  </text>
+                  {hoveredArc !== null && (
+                    <text x="200" y="240" textAnchor="middle" fill="#4B5563" fontSize="10" fontFamily="'DM Sans', sans-serif">
+                      {Math.floor(orbitArcs[hoveredArc].durationMinutes / 60) > 0
+                        ? `${Math.floor(orbitArcs[hoveredArc].durationMinutes / 60)}h${orbitArcs[hoveredArc].durationMinutes % 60 > 0 ? ` ${orbitArcs[hoveredArc].durationMinutes % 60}m` : ""}`
+                        : `${orbitArcs[hoveredArc].durationMinutes}m`}
+                    </text>
+                  )}
+                </svg>
+              </div>
+
+              {/* Right: Schedule Breakdown */}
+              <div style={{
+                background: "rgba(255,255,255,0.03)",
+                borderRadius: 16,
+                padding: "24px 16px",
+                border: "1px solid rgba(255,255,255,0.05)",
+                overflow: "hidden",
+                minWidth: 0,
+              }}>
+                <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 600, color: "#9CA3AF" }}>
+                  Schedule Breakdown
+                </h3>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {orbitArcs.map((arc, i) => {
+                    const hours = Math.floor(arc.durationMinutes / 60);
+                    const mins = arc.durationMinutes % 60;
+                    const dur = hours > 0 ? `${hours}h${mins > 0 ? ` ${mins}m` : ""}` : `${mins}m`;
+                    const isCurrent = i === currentArcIndex;
+                    return (
+                      <div
+                        key={i}
+                        onMouseEnter={() => setHoveredArc(i)}
+                        onMouseLeave={() => setHoveredArc(null)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          background: hoveredArc === i
+                            ? `${arc.color}15`
+                            : isCurrent
+                              ? `${arc.color}30`
+                              : "transparent",
+                          border: isCurrent ? `1.5px solid ${arc.color}` : "1px solid transparent",
+                          boxShadow: isCurrent ? `0 0 20px ${arc.color}60, 0 0 40px ${arc.color}25, inset 0 0 12px ${arc.color}20` : "none",
+                          animation: `orbitFadeIn 0.4s ease-out ${i * 0.04}s both`,
+                          transition: "all 0.3s",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <div style={{
+                          width: 10, height: 10, borderRadius: 3,
+                          background: arc.color, flexShrink: 0,
+                        }} />
+                        <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: isCurrent ? "#f3f4f6" : "#d1d5db", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{arc.icon} {arc.activity}</span>
+                            {isCurrent && (
+                              <span style={{
+                                fontSize: 8, fontWeight: 700, color: arc.color,
+                                background: `${arc.color}20`, padding: "1px 5px",
+                                borderRadius: 4, flexShrink: 0, letterSpacing: "0.05em",
+                              }}>NOW</span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 10, color: isCurrent ? "#9CA3AF" : "#6B7280" }}>
+                            {to12h(arc.startTime)} – {to12h(arc.endTime)}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: arc.color, flexShrink: 0, minWidth: 50, textAlign: "right" }}>
+                          {dur}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Category totals */}
+                <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 10 }}>
+                    Category Totals
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {(() => {
+                      const totals: Record<string, number> = {};
+                      orbitArcs.forEach(a => { totals[a.cat] = (totals[a.cat] || 0) + a.durationMinutes; });
+                      return Object.entries(totals)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([catId, mins]) => {
+                          const cat = categories.find(c => c.id === catId);
+                          if (!cat) return null;
+                          const hours = Math.floor(mins / 60);
+                          const m = mins % 60;
+                          const dur = hours > 0 ? `${hours}h${m > 0 ? ` ${m}m` : ""}` : `${m}m`;
+                          const pct = (mins / 1440) * 100;
+                          return (
+                            <div key={catId}>
+                              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                                <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 500 }}>
+                                  {cat.icon} {cat.label.split(" (")[0].split(" /")[0]}
+                                </span>
+                                <span style={{ fontSize: 11, color: cat.color, fontWeight: 600 }}>{dur}</span>
+                              </div>
+                              <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                                <div style={{
+                                  height: "100%", borderRadius: 2,
+                                  background: cat.color, width: `${pct}%`,
+                                  transition: "width 0.4s ease",
+                                }} />
+                              </div>
+                            </div>
+                          );
+                        });
+                    })()}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
         )}
 
         <div
