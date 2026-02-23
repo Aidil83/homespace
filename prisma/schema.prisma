@@ -148,3 +148,17 @@ model UserProblemProgress {
   @@index([userId])
   @@map("user_problem_progress")
 }
+
+model DailyChallengeCompletion {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  date       DateTime @db.Date
+  difficulty String
+  problemId  String   @map("problem_id")
+  elapsedSec Int      @default(0) @map("elapsed_sec")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([userId, date, difficulty])
+  @@index([userId])
+  @@map("daily_challenge_completions")
+}

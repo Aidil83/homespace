@@ -47,6 +47,7 @@ function formatTime(totalSeconds: number): string {
 
 let originalFavicon: string | null = null;
 let originalTitle: string | null = null;
+let activeTitleOwner: string | null = null;
 
 function playNotificationSound() {
   try {
@@ -198,32 +199,68 @@ function useStopwatch(difficulty: string) {
     setState(next);
     persist(next);
     restoreFavicon();
-    if (originalTitle) document.title = originalTitle;
-  }, [persist]);
+    if (activeTitleOwner === difficulty && originalTitle) {
+      activeTitleOwner = null;
+      document.title = originalTitle;
+    }
+  }, [persist, difficulty]);
 
   const overTime = state.elapsed >= limit;
 
-  // Update page title with minutes
+  // Update page title with minutes — only one stopwatch owns the title at a time
   useEffect(() => {
-    if (state.running || overTime) {
+    if (state.running) {
       if (!originalTitle) originalTitle = document.title;
+      activeTitleOwner = difficulty;
       const mins = Math.floor(state.elapsed / 60);
       document.title = `${mins}m — ${originalTitle}`;
+    } else if (activeTitleOwner === difficulty) {
+      activeTitleOwner = null;
+      if (originalTitle) document.title = originalTitle;
     }
-    return () => {
-      if (!state.running && originalTitle) {
-        document.title = originalTitle;
-      }
-    };
-  }, [state.elapsed, state.running, overTime]);
+  }, [state.elapsed, state.running, difficulty]);
 
   return { elapsed: state.elapsed, running: state.running, overTime, toggle, reset };
+}
+
+interface CompletionMap {
+  [difficulty: string]: { problemId: string; elapsedSec: number };
 }
 
 export function DailyChallenges() {
   const dayOfYear = getDayOfYear();
   const easyPick = EASY_POOL.length > 0 ? EASY_POOL[dayOfYear % EASY_POOL.length] : null;
   const medPick = MED_POOL.length > 0 ? MED_POOL[dayOfYear % MED_POOL.length] : null;
+  const [completions, setCompletions] = useState<CompletionMap>({});
+
+  useEffect(() => {
+    fetch("/api/dsa/daily-challenge")
+      .then((r) => (r.ok ? r.json() : {}))
+      .then(setCompletions)
+      .catch(() => {});
+  }, []);
+
+  const markDone = useCallback(async (difficulty: string, problemId: string, elapsedSec: number) => {
+    setCompletions((prev) => ({ ...prev, [difficulty]: { problemId, elapsedSec } }));
+    await fetch("/api/dsa/daily-challenge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ difficulty, problemId, elapsedSec }),
+    });
+  }, []);
+
+  const unmarkDone = useCallback(async (difficulty: string) => {
+    setCompletions((prev) => {
+      const next = { ...prev };
+      delete next[difficulty];
+      return next;
+    });
+    await fetch("/api/dsa/daily-challenge", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ difficulty }),
+    });
+  }, []);
 
   if (!easyPick && !medPick) return null;
 
@@ -237,6 +274,9 @@ export function DailyChallenges() {
           accentColor="green"
           problem={easyPick}
           difficulty="easy"
+          done={!!completions.easy}
+          onMarkDone={markDone}
+          onUnmarkDone={unmarkDone}
         />
       )}
       {medPick && (
@@ -247,6 +287,9 @@ export function DailyChallenges() {
           accentColor="purple"
           problem={medPick}
           difficulty="medium"
+          done={!!completions.medium}
+          onMarkDone={markDone}
+          onUnmarkDone={unmarkDone}
         />
       )}
     </div>
@@ -260,6 +303,9 @@ interface ChallengeCardProps {
   accentColor: "green" | "purple";
   problem: DailyProblem;
   difficulty: string;
+  done: boolean;
+  onMarkDone: (difficulty: string, problemId: string, elapsedSec: number) => void;
+  onUnmarkDone: (difficulty: string) => void;
 }
 
 function ChallengeCard({
@@ -269,11 +315,22 @@ function ChallengeCard({
   accentColor,
   problem,
   difficulty,
+  done,
+  onMarkDone,
+  onUnmarkDone,
 }: ChallengeCardProps) {
   const sw = useStopwatch(difficulty);
 
+  const toggleDone = () => {
+    if (done) {
+      onUnmarkDone(difficulty);
+    } else {
+      onMarkDone(difficulty, problem.id, sw.elapsed);
+    }
+  };
+
   return (
-    <div className="rounded-xl border bg-card p-5 space-y-3">
+    <div className={cn("rounded-xl border bg-card p-5 space-y-3", done && "border-green-600/40 opacity-60")}>
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2.5">
@@ -329,8 +386,14 @@ function ChallengeCard({
           Code
         </a>
         <button
-          className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          title="Mark as done"
+          onClick={toggleDone}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors",
+            done
+              ? "border-green-600/50 bg-green-600/20 text-green-400"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+          )}
+          title={done ? "Mark as not done" : "Mark as done"}
         >
           <CheckCircle className="h-3 w-3" />
           Done
