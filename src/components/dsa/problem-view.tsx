@@ -268,6 +268,9 @@ export function ProblemView({ slug }: ProblemViewProps) {
             constraints={problem.constraints}
             hints={problem.hints}
             category={problem.category}
+            slug={slug}
+            userCode={code}
+            testResults={result}
           />
         </ResizablePanel>
 
