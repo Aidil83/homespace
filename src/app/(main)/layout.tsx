@@ -8,7 +8,7 @@ export default function MainLayout({
   children: React.ReactNode;
 }) {
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={false}>
       <AppSidebar />
       <main className="flex-1 overflow-auto">
         <div className="sticky top-0 z-10 flex h-12 items-center border-b bg-background px-4">
