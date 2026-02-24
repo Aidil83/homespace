@@ -162,3 +162,17 @@ model DailyChallengeCompletion {
   @@index([userId])
   @@map("daily_challenge_completions")
 }
+
+model NeetcodeProgress {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  problemId  String   @map("problem_id")
+  elapsedSec Int      @default(0) @map("elapsed_sec")
+  completed  Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([userId, problemId])
+  @@index([userId])
+  @@map("neetcode_progress")
+}
