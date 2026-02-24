@@ -298,6 +298,11 @@ export function RoutineDashboard() {
   const [selectedDay, setSelectedDay] = useState(0);
   const [hoveredArc, setHoveredArc] = useState<number | null>(null);
   const [now, setNow] = useState(new Date());
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true); // eslint-disable-line react-hooks/set-state-in-effect -- SSR guard: must detect client after hydration
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60000);
@@ -481,6 +486,7 @@ export function RoutineDashboard() {
 
   return (
     <div
+      className="routine-dash"
       style={{
         fontFamily: "'DM Sans', 'Outfit', sans-serif",
         background:
@@ -488,8 +494,15 @@ export function RoutineDashboard() {
         minHeight: "100vh",
         color: "#e8e8f0",
         padding: "28px 24px",
+        containerType: "inline-size",
       }}
     >
+      <style>{`
+        .routine-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @container (max-width: 1020px) {
+          .routine-grid { grid-template-columns: 1fr; }
+        }
+      `}</style>
       {/* Header */}
       <div style={{ maxWidth: 960, margin: "0 auto" }}>
         <div style={{ marginBottom: 28 }}>
@@ -630,13 +643,7 @@ export function RoutineDashboard() {
 
         {/* OVERVIEW TAB */}
         {activeTab === "overview" && (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 20,
-            }}
-          >
+          <div className="routine-grid">
             <div
               style={{
                 background: "rgba(255,255,255,0.03)",
@@ -655,12 +662,12 @@ export function RoutineDashboard() {
               >
                 Weekly Breakdown
               </h3>
-              <ResponsiveContainer width="100%" height={280}>
-                <PieChart>
+              {mounted && (
+                <PieChart width={300} height={280} style={{ margin: "0 auto" }}>
                   <Pie
                     data={pieData}
-                    cx="50%"
-                    cy="50%"
+                    cx={150}
+                    cy={140}
                     innerRadius={65}
                     outerRadius={110}
                     paddingAngle={2}
@@ -673,7 +680,7 @@ export function RoutineDashboard() {
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />
                 </PieChart>
-              </ResponsiveContainer>
+              )}
               <div
                 style={{
                   display: "flex",
@@ -1118,13 +1125,7 @@ export function RoutineDashboard() {
 
         {/* HEALTH TAB */}
         {activeTab === "health" && (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 20,
-            }}
-          >
+          <div className="routine-grid">
             <div
               style={{
                 background: "rgba(255,255,255,0.03)",
@@ -1308,7 +1309,7 @@ export function RoutineDashboard() {
                 50% { opacity: 0.3; stroke-width: 6; }
               }
             `}</style>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+            <div className="routine-grid">
               {/* Left: Clock */}
               <div style={{
                 background: "rgba(255,255,255,0.03)",

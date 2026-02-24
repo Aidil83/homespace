@@ -20,6 +20,14 @@ import {
   RotateCcw,
   Clock,
 } from "lucide-react";
+import {
+  getDayOfYear,
+  formatTime,
+  type StopwatchState,
+  loadState,
+  saveState,
+  computeLiveElapsed,
+} from "@/lib/stopwatch";
 
 // Filter pools (done once, outside component)
 const EASY_POOL = DAILY_PROBLEM_POOL.filter((p) => p.difficulty === "Easy");
@@ -29,21 +37,6 @@ const TIME_LIMIT: Record<string, number> = {
   easy: 20 * 60,
   medium: 40 * 60,
 };
-
-function getDayOfYear(): number {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 0);
-  const diff = now.getTime() - start.getTime();
-  return Math.floor(diff / (1000 * 60 * 60 * 24));
-}
-
-function formatTime(totalSeconds: number): string {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
 
 let originalFavicon: string | null = null;
 let originalTitle: string | null = null;
@@ -112,44 +105,10 @@ function restoreFavicon() {
   } catch { /* ignore */ }
 }
 
-interface StopwatchState {
-  elapsed: number;
-  running: boolean;
-  startedAt: number | null;
-  notified: boolean;
-}
-
-function getStorageKey(difficulty: string): string {
-  const day = getDayOfYear();
-  const year = new Date().getFullYear();
-  return `daily-sw-${year}-${day}-${difficulty}`;
-}
-
-function loadState(difficulty: string): StopwatchState {
-  const fallback: StopwatchState = { elapsed: 0, running: false, startedAt: null, notified: false };
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = localStorage.getItem(getStorageKey(difficulty));
-    if (raw) {
-      const saved = JSON.parse(raw) as StopwatchState;
-      if (saved.running && saved.startedAt) {
-        saved.elapsed += Math.floor((Date.now() - saved.startedAt) / 1000);
-        saved.startedAt = Date.now();
-      }
-      return saved;
-    }
-  } catch { /* ignore */ }
-  return fallback;
-}
-
-function saveState(difficulty: string, state: StopwatchState) {
-  try {
-    localStorage.setItem(getStorageKey(difficulty), JSON.stringify(state));
-  } catch { /* ignore */ }
-}
 
 function useStopwatch(difficulty: string) {
   const [state, setState] = useState<StopwatchState>(() => loadState(difficulty));
+  const [, setTick] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const limit = TIME_LIMIT[difficulty] ?? 20 * 60;
 
@@ -161,36 +120,50 @@ function useStopwatch(difficulty: string) {
     setState(loadState(difficulty));
   }, [difficulty]);
 
+  // Compute actual elapsed from wall clock — immune to setInterval throttling
+  const liveElapsed = computeLiveElapsed(state);
+
+  // Interval only triggers re-renders so liveElapsed stays fresh
   useEffect(() => {
     if (state.running) {
       intervalRef.current = setInterval(() => {
-        setState((prev) => {
-          const next = { ...prev, elapsed: prev.elapsed + 1 };
-          // Play sound once when hitting the time limit
-          if (!prev.notified && next.elapsed >= limit) {
-            next.notified = true;
-            playNotificationSound();
-            setNotificationFavicon();
-          }
-          persist(next);
-          return next;
-        });
+        setTick((t) => t + 1);
       }, 1000);
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [state.running, persist, limit]);
+  }, [state.running]);
+
+  // Notification when hitting the time limit
+  useEffect(() => {
+    if (!state.notified && liveElapsed >= limit) {
+      setState((prev) => {
+        const next = { ...prev, notified: true };
+        persist(next);
+        return next;
+      });
+      playNotificationSound();
+      setNotificationFavicon();
+    }
+  }, [liveElapsed, limit, state.notified, persist]);
 
   const toggle = useCallback(() => {
     setState((prev) => {
-      const next = {
-        ...prev,
-        running: !prev.running,
-        startedAt: !prev.running ? Date.now() : null,
-      };
-      persist(next);
-      return next;
+      if (prev.running) {
+        // Stopping: consolidate wall-clock elapsed into base
+        const total = prev.startedAt
+          ? prev.elapsed + Math.floor((Date.now() - prev.startedAt) / 1000)
+          : prev.elapsed;
+        const next = { ...prev, elapsed: total, running: false, startedAt: null };
+        persist(next);
+        return next;
+      } else {
+        // Starting: record wall-clock start, keep current elapsed as base
+        const next = { ...prev, running: true, startedAt: Date.now() };
+        persist(next);
+        return next;
+      }
     });
   }, [persist]);
 
@@ -205,22 +178,22 @@ function useStopwatch(difficulty: string) {
     }
   }, [persist, difficulty]);
 
-  const overTime = state.elapsed >= limit;
+  const overTime = liveElapsed >= limit;
 
   // Update page title with minutes — only one stopwatch owns the title at a time
   useEffect(() => {
     if (state.running) {
       if (!originalTitle) originalTitle = document.title;
       activeTitleOwner = difficulty;
-      const mins = Math.floor(state.elapsed / 60);
+      const mins = Math.floor(liveElapsed / 60);
       document.title = `${mins}m — ${originalTitle}`;
     } else if (activeTitleOwner === difficulty) {
       activeTitleOwner = null;
       if (originalTitle) document.title = originalTitle;
     }
-  }, [state.elapsed, state.running, difficulty]);
+  }, [liveElapsed, state.running, difficulty]);
 
-  return { elapsed: state.elapsed, running: state.running, overTime, toggle, reset };
+  return { elapsed: liveElapsed, running: state.running, overTime, toggle, reset };
 }
 
 interface CompletionMap {
