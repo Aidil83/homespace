@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(npx eslint:*), Bash(git add:*), Bash(git status:*), Bash(git diff:*), Bash(git commit:*), Bash(git push:*), Bash(git branch:*), Bash(git ls-files:*), Bash(git log:*), Bash(git rev-parse:*), Read, Glob, Grep
+allowed-tools: Bash(npx eslint:*), Bash(npx vitest:*), Bash(git add:*), Bash(git status:*), Bash(git diff:*), Bash(git commit:*), Bash(git push:*), Bash(git branch:*), Bash(git ls-files:*), Bash(git log:*), Bash(git rev-parse:*), Read, Glob, Grep
 description: Lint, review, commit, and push changes
 ---
 
@@ -38,7 +38,23 @@ Pass all files in a single command. If ESLint returns errors that `--fix` cannot
 
 If there are no lintable files (e.g., only `.md` or `.json` changed), skip this step silently.
 
-### Step 3: Code review
+### Step 3: Tests
+
+Check if test files exist:
+```
+find src/ -name '*.test.ts' -o -name '*.test.tsx' -o -name '*.spec.ts' -o -name '*.spec.tsx' 2>/dev/null | head -1
+```
+
+If test files exist, run:
+```
+npx vitest run
+```
+
+If tests fail, report the failures and stop. Ask: "Tests failed. Should I fix them, or ship anyway?"
+
+If no test files exist, skip this step silently.
+
+### Step 4: Code review
 
 Read the full diff of what will be committed:
 - `git diff` (unstaged changes including ESLint fixes)
@@ -57,14 +73,14 @@ If issues are found, list them with file names and line numbers. Ask: "I found t
 
 If no issues, state "Code review passed." and continue.
 
-### Step 4: Stage files
+### Step 5: Stage files
 
 Stage all changed and new files by name. Rules:
 - NEVER use `git add -A` or `git add .`
 - NEVER stage `.env` files or anything that looks like credentials
 - Stage each file explicitly by path
 
-### Step 5: Commit
+### Step 6: Commit
 
 Write a commit message following the project's style:
 - Imperative mood ("Add", "Fix", "Update", not "Added" or "Adds")
@@ -83,7 +99,7 @@ EOF
 )"
 ```
 
-### Step 6: Push
+### Step 7: Push
 
 If the branch has no upstream (pre-flight shows "no upstream"), push with:
 ```bash
