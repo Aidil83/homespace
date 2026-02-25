@@ -397,7 +397,7 @@ interface StopwatchProps {
 
 function Stopwatch({ sw, accentColor }: StopwatchProps) {
   return (
-    <div className="flex items-center gap-1">
+    <div className="group/sw flex items-center gap-1">
       <div
         className={cn(
           "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-mono tabular-nums",
@@ -413,25 +413,30 @@ function Stopwatch({ sw, accentColor }: StopwatchProps) {
         <Clock className="h-3 w-3" />
         {formatTime(sw.elapsed)}
       </div>
-      <button
-        onClick={sw.toggle}
-        className={cn(
-          "rounded-md p-1 transition-colors",
-          sw.running
-            ? "text-yellow-400 hover:bg-yellow-600/20"
-            : "text-green-400 hover:bg-green-600/20"
-        )}
-        title={sw.running ? "Pause" : "Start"}
-      >
-        {sw.running ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-      </button>
-      <button
-        onClick={sw.reset}
-        className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        title="Reset"
-      >
-        <RotateCcw className="h-3.5 w-3.5" />
-      </button>
+      <div className={cn(
+        "flex items-center gap-0.5 transition-opacity",
+        sw.running ? "opacity-100" : "opacity-0 group-hover/sw:opacity-100"
+      )}>
+        <button
+          onClick={sw.toggle}
+          className={cn(
+            "rounded-md p-1 transition-colors",
+            sw.running
+              ? "text-yellow-400 hover:bg-yellow-600/20"
+              : "text-green-400 hover:bg-green-600/20"
+          )}
+          title={sw.running ? "Pause" : "Start"}
+        >
+          {sw.running ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+        </button>
+        <button
+          onClick={sw.reset}
+          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          title="Reset"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </div>
   );
 }

@@ -490,7 +490,7 @@ function ProblemRow({
       <DifficultyBadge difficulty={problem.difficulty.toLowerCase()} className="shrink-0" />
 
       {/* Inline stopwatch */}
-      <div className="flex shrink-0 items-center gap-0.5">
+      <div className="group/sw flex shrink-0 items-center gap-0.5">
         <span
           className={cn(
             "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-mono tabular-nums",
@@ -504,29 +504,34 @@ function ProblemRow({
           <Clock className="h-3 w-3" />
           {formatTime(sw.elapsed)}
         </span>
-        <button
-          onClick={sw.toggle}
-          className={cn(
-            "rounded p-0.5 transition-colors",
-            sw.running
-              ? "text-yellow-400 hover:bg-yellow-600/20"
-              : "text-green-400 hover:bg-green-600/20"
-          )}
-          title={sw.running ? "Pause" : "Start"}
-        >
-          {sw.running ? (
-            <Pause className="h-3 w-3" />
-          ) : (
-            <Play className="h-3 w-3" />
-          )}
-        </button>
-        <button
-          onClick={handleReset}
-          className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          title="Reset"
-        >
-          <RotateCcw className="h-3 w-3" />
-        </button>
+        <div className={cn(
+          "flex items-center gap-0.5 transition-opacity",
+          sw.running ? "opacity-100" : "opacity-0 group-hover/sw:opacity-100"
+        )}>
+          <button
+            onClick={sw.toggle}
+            className={cn(
+              "rounded p-0.5 transition-colors",
+              sw.running
+                ? "text-yellow-400 hover:bg-yellow-600/20"
+                : "text-green-400 hover:bg-green-600/20"
+            )}
+            title={sw.running ? "Pause" : "Start"}
+          >
+            {sw.running ? (
+              <Pause className="h-3 w-3" />
+            ) : (
+              <Play className="h-3 w-3" />
+            )}
+          </button>
+          <button
+            onClick={handleReset}
+            className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            title="Reset"
+          >
+            <RotateCcw className="h-3 w-3" />
+          </button>
+        </div>
       </div>
     </div>
   );
