@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
+  serverExternalPackages: ["pg", "@prisma/adapter-pg"],
 };
 
 export default withSerwist(nextConfig);
