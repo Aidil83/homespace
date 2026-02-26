@@ -56,6 +56,8 @@ If the build fails, show the error output and stop. Ask: "Build failed. Want me 
 
 ### Step 5: Environment variable check
 
+**5a. Check for missing env vars:**
+
 Scan the codebase for required env vars:
 ```
 grep -roh 'process\.env\.\w\+' src/ | sort -u
@@ -69,6 +71,27 @@ vercel env ls production 2>/dev/null
 Compare the two lists. If any required env vars are missing from Vercel production, warn the user with the list of missing vars. Ask: "These env vars are missing in Vercel production. Deploy anyway?"
 
 If the `vercel env ls` command fails, note it as a warning but don't block.
+
+**5b. Validate env var values:**
+
+Pull production env vars and check for malformed values:
+```
+vercel env pull .env.prod-validate --environment production 2>/dev/null
+```
+
+Inspect each value for common issues:
+- Extra quotes wrapping the value (e.g., `""value"`)
+- Trailing `\n` or whitespace
+- Empty values for required vars
+- URLs that don't start with `http://` or `https://`
+- `DATABASE_URL` should use port `6543` (Supabase pooler) not `5432` (direct) for serverless
+
+If any malformed values are found, list them and stop. Ask: "These env vars have malformed values. Fix before deploying?"
+
+Clean up the temp file:
+```
+rm -f .env.prod-validate
+```
 
 ### Step 6: Prisma migration check
 
@@ -96,7 +119,8 @@ Summarize:
 - Type check: ✓/✗
 - Lint: ✓/✗
 - Build: ✓/✗
-- Env vars: ✓/⚠/✗
+- Env vars (presence): ✓/⚠/✗
+- Env vars (validation): ✓/⚠/✗
 - Migrations: ✓/⚠/✗
 - Deploy URL: (from vercel output)
 - Status: Deployed / Failed
