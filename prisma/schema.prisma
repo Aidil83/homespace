@@ -176,3 +176,40 @@ model NeetcodeProgress {
   @@index([userId])
   @@map("neetcode_progress")
 }
+
+// ========================================
+// Focus Sessions & Biome Progression
+// ========================================
+
+model FocusSession {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  biome       String
+  duration    Int
+  elapsed     Int       @default(0)
+  status      String    @default("active")
+  collectible String?
+  startedAt   DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId])
+  @@index([userId, biome])
+  @@index([userId, createdAt])
+  @@map("focus_sessions")
+}
+
+model BiomeProgress {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  biome        String
+  xp           Int      @default(0)
+  level        Int      @default(1)
+  collectibles Json     @default("[]")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([userId, biome])
+  @@index([userId])
+  @@map("biome_progress")
+}

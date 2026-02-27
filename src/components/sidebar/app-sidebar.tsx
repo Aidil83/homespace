@@ -16,6 +16,7 @@ import {
   FilePlus,
   Dumbbell,
   Clock,
+  Flame,
   Code,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -261,6 +262,14 @@ export function AppSidebar() {
                   <Link href="/routine">
                     <Clock className="h-4 w-4" />
                     <span>Routine</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === "/focus"}>
+                  <Link href="/focus">
+                    <Flame className="h-4 w-4" />
+                    <span>Focus</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
