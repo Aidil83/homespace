@@ -482,6 +482,28 @@ export function RoutineDashboard() {
   });
   const currentArcSegment = currentArcIndex >= 0 ? orbitArcs[currentArcIndex] : undefined;
 
+  // Countdown: minutes remaining until current block ends
+  const countdownRemaining = useMemo(() => {
+    if (!currentArcSegment) return null;
+    const endMin = timeToMinutes(currentArcSegment.endTime);
+    let endMinutes = endMin;
+    // Handle blocks that wrap past midnight
+    if (endMinutes <= currentMinutes && currentArcSegment.ring === "sleep") {
+      endMinutes += 1440;
+    }
+    const diff = endMinutes - currentMinutes;
+    if (diff <= 0) return null;
+    const h = Math.floor(diff / 60);
+    const m = diff % 60;
+    return { h, m, total: diff };
+  }, [currentArcSegment, currentMinutes]);
+
+  const countdownStr = countdownRemaining
+    ? countdownRemaining.h > 0
+      ? `${countdownRemaining.h}h ${countdownRemaining.m}m left`
+      : `${countdownRemaining.m}m left`
+    : null;
+
   const displayArc = hoveredArc !== null ? orbitArcs[hoveredArc] : currentArcSegment;
 
   return (
@@ -1523,15 +1545,20 @@ export function RoutineDashboard() {
                   )}
 
                   {/* Center info */}
-                  <text x="200" y={hoveredArc !== null ? 180 : 185} textAnchor="middle" fill="#e8e8f0" fontSize="24" fontWeight="700" fontFamily="'DM Sans', sans-serif">
+                  <text x="200" y={hoveredArc !== null ? 180 : (countdownStr ? 178 : 185)} textAnchor="middle" fill="#e8e8f0" fontSize="24" fontWeight="700" fontFamily="'DM Sans', sans-serif">
                     {hoveredArc !== null ? `${orbitArcs[hoveredArc].icon}` : currentTimeStr}
                   </text>
-                  <text x="200" y={hoveredArc !== null ? 205 : 210} textAnchor="middle" fill={displayArc?.color || "#9CA3AF"} fontSize="12" fontWeight="600" fontFamily="'DM Sans', sans-serif">
+                  <text x="200" y={hoveredArc !== null ? 205 : (countdownStr ? 198 : 210)} textAnchor="middle" fill={displayArc?.color || "#9CA3AF"} fontSize="12" fontWeight="600" fontFamily="'DM Sans', sans-serif">
                     {displayArc?.activity || ""}
                   </text>
-                  <text x="200" y={hoveredArc !== null ? 223 : 228} textAnchor="middle" fill="#6B7280" fontSize="10" fontFamily="'DM Sans', sans-serif">
+                  <text x="200" y={hoveredArc !== null ? 223 : (countdownStr ? 214 : 228)} textAnchor="middle" fill="#6B7280" fontSize="10" fontFamily="'DM Sans', sans-serif">
                     {displayArc ? `${to12h(displayArc.startTime)} – ${to12h(displayArc.endTime)}` : ""}
                   </text>
+                  {hoveredArc === null && countdownStr && (
+                    <text x="200" y="234" textAnchor="middle" fill={currentArcSegment?.color || "#4F8EF7"} fontSize="11" fontWeight="600" fontFamily="'DM Sans', sans-serif" opacity="0.9">
+                      {countdownStr}
+                    </text>
+                  )}
                   {hoveredArc !== null && (
                     <text x="200" y="240" textAnchor="middle" fill="#4B5563" fontSize="10" fontFamily="'DM Sans', sans-serif">
                       {Math.floor(orbitArcs[hoveredArc].durationMinutes / 60) > 0
@@ -1600,6 +1627,11 @@ export function RoutineDashboard() {
                           </div>
                           <div style={{ fontSize: 10, color: isCurrent ? "#9CA3AF" : "#6B7280" }}>
                             {to12h(arc.startTime)} – {to12h(arc.endTime)}
+                            {isCurrent && countdownStr && (
+                              <span style={{ marginLeft: 6, color: arc.color, fontWeight: 600 }}>
+                                {countdownStr}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div style={{ fontSize: 12, fontWeight: 600, color: arc.color, flexShrink: 0, minWidth: 50, textAlign: "right" }}>
