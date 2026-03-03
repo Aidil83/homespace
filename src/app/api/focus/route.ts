@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { biome, duration } = body;
 
-  if (!BIOME_IDS.includes(biome)) {
+  if (biome !== "village" && !BIOME_IDS.includes(biome)) {
     return NextResponse.json({ error: "Invalid biome" }, { status: 400 });
   }
 

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "postinstall": "prisma generate",
     "build": "next build --webpack",
     "start": "next start",
@@ -19,6 +19,8 @@
     "@monaco-editor/react": "^4.7.0",
     "@prisma/adapter-pg": "^7.4.0",
     "@prisma/client": "^7.4.0",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.5.0",
     "@serwist/next": "^9.5.5",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.3",
@@ -38,6 +40,7 @@
     "remark-gfm": "^4.0.1",
     "serwist": "^9.5.5",
     "tailwind-merge": "^3.4.0",
+    "three": "^0.183.1",
     "tldraw": "^4.3.1"
   },
   "devDependencies": {
@@ -46,6 +49,7 @@
     "@types/pg": "^8.16.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "^0.183.1",
     "dotenv": "^17.2.4",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",

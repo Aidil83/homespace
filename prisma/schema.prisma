@@ -213,3 +213,21 @@ model BiomeProgress {
   @@index([userId])
   @@map("biome_progress")
 }
+
+// ========================================
+// Village Builder (3D Focus Village)
+// ========================================
+
+model VillageBuilding {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  buildingType String   @map("building_type")
+  gridIndex    Int      @map("grid_index")
+  positionX    Float    @map("position_x")
+  positionZ    Float    @map("position_z")
+  rotation     Float    @default(0)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId])
+  @@map("village_buildings")
+}

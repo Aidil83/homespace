@@ -32,7 +32,7 @@ interface BiomeSelectorProps {
 
 export function BiomeSelector({ biomeProgress, onStart }: BiomeSelectorProps) {
   const [selectedBiome, setSelectedBiome] = useState<BiomeId | null>(null);
-  const [selectedDuration, setSelectedDuration] = useState(DURATION_OPTIONS[1].seconds); // default 25m
+  const [selectedDuration, setSelectedDuration] = useState<number>(DURATION_OPTIONS[1].seconds); // default 25m
 
   return (
     <div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
 import { BIOMES, type BiomeId } from "@/components/focus/biomes/types";
+import { getUnlockedTypes } from "@/lib/village/types";
 
 export async function PATCH(
   req: NextRequest,
@@ -40,12 +41,36 @@ export async function PATCH(
     return NextResponse.json({ session: updated, biomeProgress: null });
   }
 
-  // Completed: calculate XP, pick collectible, upsert progress
+  const updated = await prisma.focusSession.update({
+    where: { id: sessionId },
+    data: {
+      status: "completed",
+      elapsed,
+      completedAt: new Date(),
+    },
+  });
+
+  // Village sessions skip biome XP logic
+  if (session.biome === "village") {
+    const totalSessions = await prisma.focusSession.count({
+      where: { userId: user.id, status: "completed" },
+    });
+    const unlockedTypes = getUnlockedTypes(totalSessions);
+
+    return NextResponse.json({
+      session: updated,
+      biomeProgress: null,
+      xpEarned: 0,
+      totalSessions,
+      unlockedTypes,
+    });
+  }
+
+  // Biome sessions: calculate XP, pick collectible, upsert progress
   const biomeId = session.biome as BiomeId;
   const biomeMeta = BIOMES[biomeId];
   const xpEarned = Math.floor(elapsed / 60);
 
-  // Get or create biome progress
   let progress = await prisma.biomeProgress.findUnique({
     where: { userId_biome: { userId: user.id, biome: biomeId } },
   });
@@ -77,15 +102,14 @@ export async function PATCH(
     },
   });
 
-  const updated = await prisma.focusSession.update({
-    where: { id: sessionId },
-    data: {
-      status: "completed",
-      elapsed,
-      collectible,
-      completedAt: new Date(),
-    },
-  });
+  // Also update the session with the collectible
+  if (collectible) {
+    await prisma.focusSession.update({
+      where: { id: sessionId },
+      data: { collectible },
+    });
+    updated.collectible = collectible;
+  }
 
   return NextResponse.json({
     session: updated,
