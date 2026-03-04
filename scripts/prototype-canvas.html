@@ -1,0 +1,1643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Village Builder — Canvas Isometric (Advanced)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+  }
+  .header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(26,26,46,0.95);
+    backdrop-filter: blur(8px);
+    padding: 10px 20px;
+    display: flex; align-items: center; gap: 10px;
+    color: white; font-size: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .header strong { font-size: 15px; }
+  .badge { background: rgba(255,255,255,0.1); padding: 3px 10px; border-radius: 10px; font-size: 12px; color: #8BC34A; cursor: pointer; }
+  .approach-label { margin-left: auto; opacity: 0.4; font-size: 12px; }
+  canvas { margin-top: 46px; cursor: grab; display: block; }
+  #tooltip {
+    display: none; position: fixed;
+    background: rgba(0,0,0,0.9); color: white;
+    padding: 6px 12px; border-radius: 6px;
+    font-size: 11px; z-index: 200; pointer-events: none;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .footer {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(26,26,46,0.95);
+    padding: 10px 20px;
+    display: flex; align-items: center; gap: 12px;
+    color: white; font-size: 13px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .prog-track { flex: 1; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; }
+  .prog-fill { height: 100%; width: 100%; background: #8BC34A; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <strong>My Village</strong>
+  <span class="badge">24 / 24 built</span>
+  <span class="approach-label">Canvas Isometric (Advanced)</span>
+</div>
+
+<canvas id="c"></canvas>
+<div id="tooltip"></div>
+
+<div class="footer">
+  <span style="color:#8BC34A">24 / 24 built</span>
+  <div class="prog-track"><div class="prog-fill"></div></div>
+  <span>24 sessions</span>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+let ctx = canvas.getContext('2d');
+const tooltip = document.getElementById('tooltip');
+
+// ===== HiDPI Fix + Responsive Canvas =====
+const dpr = window.devicePixelRatio || 1;
+const HEADER_H = 46, FOOTER_H = 40;
+let CSS_W = window.innerWidth;
+let CSS_H = window.innerHeight - HEADER_H - FOOTER_H;
+
+function resizeCanvas() {
+  CSS_W = window.innerWidth;
+  CSS_H = window.innerHeight - HEADER_H - FOOTER_H;
+  canvas.width = CSS_W * dpr;
+  canvas.height = CSS_H * dpr;
+  canvas.style.width = CSS_W + 'px';
+  canvas.style.height = CSS_H + 'px';
+  ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// ===== Grid & Scene Constants =====
+const GRID = 24, TILE = 48, BLK = 10;
+// Scene cache covers full isometric world
+const SCENE_W = 1300, SCENE_H = 950;
+const SCENE_OX = SCENE_W / 2, SCENE_OY = 160;
+
+// ===== Rotation =====
+let rotation = 0; // current visual angle (radians)
+let rotationFrom = 0, rotationTo = 0, rotationProgress = 1; // 1 = settled
+let autoRotating = false;
+const ROTATION_ANIM_DURATION = 1.2; // seconds for 90° transition
+const HALF_PI = Math.PI / 2;
+let cos_r = 1, sin_r = 0;
+
+function updateRotationTrig() { cos_r = Math.cos(rotation); sin_r = Math.sin(rotation); }
+
+function rotateGrid(gx, gy) {
+  const cx = (GRID - 1) / 2;
+  const dx = gx - cx, dy = gy - cx;
+  return [cx + dx * cos_r - dy * sin_r, cx + dx * sin_r + dy * cos_r];
+}
+
+function startRotationAnim() {
+  rotationFrom = rotation;
+  rotationTo = rotation + HALF_PI;
+  rotationProgress = 0;
+}
+
+function settleRotation() {
+  rotation = rotationTo;
+  rotationProgress = 1;
+  updateRotationTrig();
+  rebuildIsoCache();
+  recomputeBounds();
+  recomputeWaterfallSplash();
+  creatures.length = 0;
+  initCreatures();
+  buildSceneCache();
+}
+
+// ===== Camera =====
+const camera = {
+  x: SCENE_W / 2, y: SCENE_H / 2 - 10,
+  targetX: SCENE_W / 2, targetY: SCENE_H / 2 - 10,
+  zoom: 0.75, targetZoom: 0.75,
+  isDragging: false, dragStartX: 0, dragStartY: 0, camStartX: 0, camStartY: 0,
+};
+
+function screenToWorld(sx, sy) {
+  return { x: (sx - CSS_W / 2) / camera.zoom + camera.x, y: (sy - CSS_H / 2) / camera.zoom + camera.y };
+}
+
+function isInViewport(wx, wy, margin) {
+  margin = margin || 60;
+  const sx = (wx - camera.x) * camera.zoom + CSS_W / 2;
+  const sy = (wy - camera.y) * camera.zoom + CSS_H / 2;
+  return sx > -margin && sx < CSS_W + margin && sy > -margin && sy < CSS_H + margin;
+}
+
+// ===== Isometric Helpers =====
+function toIso(gx, gy) {
+  const [rx, ry] = rotateGrid(gx, gy);
+  return { x: SCENE_OX + (rx - ry) * (TILE / 2), y: SCENE_OY + (rx + ry) * (TILE / 4) };
+}
+
+const isoCache = [];
+function rebuildIsoCache() {
+  for (let gy = 0; gy < GRID; gy++) {
+    isoCache[gy] = isoCache[gy] || [];
+    for (let gx = 0; gx < GRID; gx++) isoCache[gy][gx] = toIso(gx, gy);
+  }
+}
+rebuildIsoCache();
+
+function drawIsoBlock(px, py, w, d, h, topCol, leftCol, rightCol) {
+  const hw = w / 2, hd = d / 4;
+  const detailed = w >= 20 && h >= 5;
+
+  // Left face
+  ctx.fillStyle = leftCol;
+  ctx.beginPath(); ctx.moveTo(px - hw, py + hd - h); ctx.lineTo(px, py + hd * 2 - h); ctx.lineTo(px, py + hd * 2); ctx.lineTo(px - hw, py + hd); ctx.closePath(); ctx.fill();
+  // Right face
+  ctx.fillStyle = rightCol;
+  ctx.beginPath(); ctx.moveTo(px + hw, py + hd - h); ctx.lineTo(px, py + hd * 2 - h); ctx.lineTo(px, py + hd * 2); ctx.lineTo(px + hw, py + hd); ctx.closePath(); ctx.fill();
+
+  // Ambient occlusion — darken bottom 25% of side faces
+  if (detailed) {
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    const aoH = h * 0.25;
+    // Left face bottom strip
+    ctx.beginPath();
+    ctx.moveTo(px - hw, py + hd); ctx.lineTo(px, py + hd * 2);
+    ctx.lineTo(px, py + hd * 2 - aoH); ctx.lineTo(px - hw, py + hd - aoH);
+    ctx.closePath(); ctx.fill();
+    // Right face bottom strip
+    ctx.beginPath();
+    ctx.moveTo(px + hw, py + hd); ctx.lineTo(px, py + hd * 2);
+    ctx.lineTo(px, py + hd * 2 - aoH); ctx.lineTo(px + hw, py + hd - aoH);
+    ctx.closePath(); ctx.fill();
+
+    // Texture lines on left face
+    ctx.strokeStyle = 'rgba(0,0,0,0.05)'; ctx.lineWidth = 0.5;
+    const seed = ((px * 7 + py * 13) | 0) & 0xFFFF;
+    for (let i = 0; i < 2; i++) {
+      const t = 0.3 + i * 0.35;
+      const lx = px - hw * (1 - t * 0.5);
+      const ly = py + hd - h + h * t;
+      ctx.beginPath(); ctx.moveTo(lx - 1, ly); ctx.lineTo(lx + hw * 0.2, ly + h * 0.3); ctx.stroke();
+    }
+    // Texture lines on right face
+    const seed2 = ((px * 11 + py * 19) | 0) & 0xFFFF;
+    for (let i = 0; i < 2; i++) {
+      const t2 = 0.3 + i * 0.35;
+      const rx = px + hw * (1 - t2 * 0.5);
+      const ry = py + hd - h + h * t2;
+      ctx.beginPath(); ctx.moveTo(rx + 1, ry); ctx.lineTo(rx - hw * 0.2, ry + h * 0.3); ctx.stroke();
+    }
+  }
+
+  // Top face
+  ctx.fillStyle = topCol;
+  ctx.beginPath(); ctx.moveTo(px, py - h); ctx.lineTo(px + hw, py + hd - h); ctx.lineTo(px, py + hd * 2 - h); ctx.lineTo(px - hw, py + hd - h); ctx.closePath(); ctx.fill();
+
+  // Top-face directional lighting: highlight upper-left, shadow lower-right (skip flat ground)
+  if (w >= 12 && h >= 10) {
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.beginPath(); ctx.moveTo(px, py - h); ctx.lineTo(px - hw, py + hd - h); ctx.lineTo(px, py + hd * 2 - h); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.04)';
+    ctx.beginPath(); ctx.moveTo(px, py - h); ctx.lineTo(px + hw, py + hd - h); ctx.lineTo(px, py + hd * 2 - h); ctx.closePath(); ctx.fill();
+  }
+
+  // Edge highlights (increased contrast)
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(px - hw, py + hd - h); ctx.lineTo(px, py - h); ctx.lineTo(px + hw, py + hd - h); ctx.stroke();
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath(); ctx.moveTo(px - hw, py + hd); ctx.lineTo(px, py + hd * 2); ctx.lineTo(px + hw, py + hd); ctx.stroke();
+}
+
+function drawGridBlock(gx, gy, h, topCol, leftCol, rightCol) {
+  const iso = isoCache[gy]?.[gx] || toIso(gx, gy);
+  drawIsoBlock(iso.x, iso.y, TILE, TILE, h, topCol, leftCol, rightCol);
+}
+
+// ===== Terrain =====
+const heightMap = [];
+for (let gy = 0; gy < GRID; gy++) {
+  heightMap[gy] = [];
+  for (let gx = 0; gx < GRID; gx++) {
+    const nx = gx / GRID, ny = gy / GRID;
+    let h = 0;
+    // Hilltop district (top-right quadrant) — dramatic peaks
+    if (gx >= 14 && gy < 10) {
+      h = 5 + Math.sin(nx * Math.PI * 3) * 2.5 + Math.cos(ny * Math.PI * 2) * 2.5;
+      const dist = Math.sqrt((gx - 18) ** 2 + (gy - 4) ** 2);
+      if (dist < 5) h += (5 - dist) * 1.0;
+      // Back-edge cliff: force tall heights for gy<=1 so cliff blends into hilltop
+      if (gy <= 1 && gx >= 16) {
+        h = 8 + Math.sin(nx * Math.PI * 3) * 1.5;
+      }
+      // Cliff edge: sharp drop where hilltop meets river diagonal (gx+gy ≈ 22-24)
+      const diag = gx + gy;
+      if (diag >= 20 && diag <= 24) {
+        const cliffFactor = Math.max(0, 1 - (24 - diag) / 4);
+        h *= (1 - cliffFactor * 0.6);
+      }
+    }
+    // Gentle farming hills (right side, lower) — rolling hills
+    else if (gx >= 14 && gy >= 10) {
+      h = Math.sin(nx * Math.PI * 2 + ny) * 2 + 2.5;
+    }
+    // Residential (left, gy 8-15) — gentle undulation
+    else if (gx < 14 && gy >= 8 && gy <= 15) {
+      h = Math.sin(nx * Math.PI * 3 + ny * 2) * 1.5 + 1;
+    }
+    // Market center — subtle variation
+    else if (gx >= 9 && gx <= 16 && gy >= 9 && gy <= 16) {
+      h = Math.sin(nx * Math.PI * 2) * 0.8 + 0.8;
+    }
+    // Waterfront (gy >= 16) — slight coastal variation
+    else if (gy >= 16) {
+      h = Math.sin(nx * Math.PI * 3 + ny) * 0.6 + 0.3;
+    }
+    // General noise — two octaves
+    h += Math.sin(nx * Math.PI * 4 + ny * 3) * 1;
+    h += Math.cos(ny * Math.PI * 3 + nx * 2) * 0.8;
+    // Third noise octave for natural variation
+    h += Math.sin(nx * Math.PI * 7 + ny * 5) * 0.5;
+    heightMap[gy][gx] = Math.max(0, Math.round(h));
+  }
+}
+
+// ===== River =====
+const riverCenter = [
+  [22,1],[21,2],[20,3],[19,4],[18,5],[17,6],[16,7],
+  [15,8],[14,9],[13,10],[12,11],[11,12],[10,13],
+  [9,14],[8,15],[7,16],[6,17],[5,18],[4,19],[3,20],[2,21],[1,22],
+];
+const riverTiles = new Set();
+for (const [rx, ry] of riverCenter) {
+  riverTiles.add(`${rx},${ry}`);
+  if (rx + 1 < GRID) riverTiles.add(`${rx + 1},${ry}`);
+  if (ry + 1 < GRID) riverTiles.add(`${rx},${ry + 1}`);
+}
+
+// ===== Tile Types =====
+const tileTypes = {};
+const grassShades = [
+  { top: '#4a7c3f', left: '#3d6b2e', right: '#356026' },
+  { top: '#528a47', left: '#457a36', right: '#3d6b2e' },
+  { top: '#43723a', left: '#386228', right: '#305522' },
+];
+
+// Carve river
+for (const key of riverTiles) {
+  const [gx, gy] = key.split(',').map(Number);
+  if (gx < GRID && gy < GRID) {
+    heightMap[gy][gx] = 0;
+    tileTypes[key] = 'water';
+  }
+}
+
+// Sand banks around river
+for (const key of riverTiles) {
+  const [gx, gy] = key.split(',').map(Number);
+  for (const [dx, dy] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+    const nx = gx + dx, ny = gy + dy;
+    const nk = `${nx},${ny}`;
+    if (nx >= 0 && nx < GRID && ny >= 0 && ny < GRID && !riverTiles.has(nk) && !tileTypes[nk]) {
+      tileTypes[nk] = 'sand';
+    }
+  }
+}
+
+// Water tiles list for shimmer
+const waterTiles = [];
+for (const key of riverTiles) {
+  const [gx, gy] = key.split(',').map(Number);
+  if (gx < GRID && gy < GRID) waterTiles.push([gx, gy]);
+}
+
+// Paths — main roads + district connections
+const pathTiles = [
+  // Main E-W road (row 12)
+  ...Array.from({length: 22}, (_, i) => [i + 1, 12]),
+  // Main N-S road (col 12)
+  ...Array.from({length: 22}, (_, i) => [12, i + 1]),
+  // Residential paths (left, rows 8-15)
+  [2,9],[3,9],[4,9],[5,9],[6,9],[7,9],[8,9],[9,9],[10,9],
+  [3,10],[3,11],[3,13],[3,14],[5,10],[5,11],[5,13],
+  [6,11],[7,11],[8,11],[9,11],[2,13],[2,14],[7,13],[8,13],
+  // Market Square (center, gx 9-16, gy 9-16)
+  [13,10],[14,10],[15,10],[13,11],[14,11],[15,11],
+  [13,13],[14,13],[15,13],[13,14],[14,14],[15,14],
+  [10,11],[11,11],[10,13],[11,13],
+  // Hilltop paths (top-right, gx 14-23, gy 0-9)
+  [16,3],[17,3],[18,3],[19,3],[20,3],
+  [18,2],[18,4],[18,5],[18,6],[18,7],[18,8],
+  [15,5],[16,5],[17,5],[19,5],[20,5],
+  [20,2],[20,4],[20,6],[20,7],[20,8],
+  [16,7],[17,7],[19,7],[21,7],
+  // Farming paths (right side, lower)
+  [16,14],[17,14],[18,14],[19,14],[20,14],
+  [18,15],[18,16],[18,17],[18,18],
+  [16,16],[17,16],[19,16],[20,16],
+  // Waterfront paths (bottom-left, gy 16-23)
+  [2,17],[3,17],[4,17],[5,17],[6,17],[7,17],[8,17],[9,17],[10,17],
+  [2,18],[2,19],[2,20],[4,19],[5,19],[6,19],[7,19],[8,19],
+  [4,20],[4,21],[6,21],[8,21],[10,19],
+  // Bridge paths (over river)
+  [13,10],[12,11],[11,12],[10,13], // N bridge area (main road crosses river)
+  [6,17],[7,16],[8,15], // S bridge area
+];
+// Remove duplicates
+const pathSet = new Set(pathTiles.map(p => `${p[0]},${p[1]}`));
+for (const key of pathSet) {
+  const [gx, gy] = key.split(',').map(Number);
+  if (gx < GRID && gy < GRID && !riverTiles.has(key)) tileTypes[key] = 'path';
+}
+
+// Bridge tiles (paths that cross river)
+const bridgeTiles = [];
+for (const key of pathSet) {
+  if (riverTiles.has(key)) {
+    const [gx, gy] = key.split(',').map(Number);
+    tileTypes[key] = 'bridge';
+    bridgeTiles.push([gx, gy]);
+  }
+}
+
+// Stone tiles in hilltop
+const stoneTiles = [[15,2],[16,2],[15,1],[14,1],[21,1],[22,2],[22,3],[23,4],[23,5]];
+for (const [gx, gy] of stoneTiles) if (gx < GRID && gy < GRID && !tileTypes[`${gx},${gy}`]) tileTypes[`${gx},${gy}`] = 'stone';
+
+const tileColors = {
+  path:   { top: '#8B7355', left: '#7A6548', right: '#6B573C' },
+  water:  { top: '#2980B9', left: '#2471A3', right: '#1F618D' },
+  sand:   { top: '#D4B896', left: '#C4A882', right: '#B49872' },
+  stone:  { top: '#7F8C8D', left: '#6B7778', right: '#5A6566' },
+  bridge: { top: '#8B6914', left: '#7A5C10', right: '#6B500E' },
+};
+
+function getGroundColor(gx, gy) {
+  const key = `${gx},${gy}`;
+  if (tileTypes[key] && tileColors[tileTypes[key]]) return tileColors[tileTypes[key]];
+  return grassShades[(gx * 3 + gy * 7) % 3];
+}
+
+// ===== Flatten building sites =====
+const buildings = [
+  // Residential (left, gy 8-15)
+  { gx: 3,  gy: 10, name: 'Cottage',     done: true,  num: 1 },
+  { gx: 5,  gy: 11, name: 'Farm',        done: true,  num: 2 },
+  { gx: 9,  gy: 11, name: 'Well',        done: true,  num: 3 },
+  { gx: 7,  gy: 9,  name: 'Garden',      done: true,  num: 4 },
+  { gx: 2,  gy: 14, name: 'Chapel',      done: true,  num: 9 },
+  { gx: 5,  gy: 9,  name: 'Library',     done: true,  num: 11 },
+  { gx: 8,  gy: 13, name: 'Bakery',      done: true,  num: 12 },
+  { gx: 6,  gy: 13, name: 'Tavern',      done: true,  num: 8 },
+  // Market Square (center)
+  { gx: 13, gy: 11, name: 'Market',      done: true,  num: 6 },
+  { gx: 14, gy: 13, name: 'Brewery',     done: true,  num: 17 },
+  { gx: 10, gy: 11, name: 'Fountain',    done: true,  num: 23 },
+  { gx: 15, gy: 10, name: 'Apothecary',  done: true,  num: 22 },
+  // Hilltop (top-right)
+  { gx: 18, gy: 3,  name: 'Windmill',    done: true,  num: 5 },
+  { gx: 16, gy: 5,  name: 'Blacksmith',  done: true,  num: 7, forge: true },
+  { gx: 20, gy: 2,  name: 'Watchtower',  done: true,  num: 10 },
+  { gx: 19, gy: 7,  name: 'Mine',        done: true,  num: 18 },
+  { gx: 17, gy: 7,  name: 'Barracks',    done: true,  num: 21 },
+  { gx: 21, gy: 5,  name: 'Castle',      done: true,  num: 24 },
+  // Farming (right, lower)
+  { gx: 18, gy: 14, name: 'Stable',      done: true,  num: 15 },
+  { gx: 16, gy: 16, name: 'Granary',     done: true,  num: 20 },
+  // Waterfront (bottom-left)
+  { gx: 4,  gy: 19, name: 'Fishing Hut', done: true,  num: 13 },
+  { gx: 2,  gy: 21, name: 'Lighthouse',  done: true,  num: 16 },
+  { gx: 8,  gy: 21, name: 'Dock',        done: true,  num: 19 },
+  { gx: 6,  gy: 19, name: 'Bridge',      done: true,  num: 14 },
+];
+
+// Flatten building sites
+for (const b of buildings) {
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const nx = b.gx + dx, ny = b.gy + dy;
+      if (nx >= 0 && nx < GRID && ny >= 0 && ny < GRID) heightMap[ny][nx] = 0;
+    }
+  }
+}
+
+// Also flatten flat zones for paths near buildings
+const extraFlats = [[3,9],[3,11],[5,10],[5,12],[9,10],[9,12],[7,10],[7,8],
+  [13,10],[13,12],[14,12],[14,14],[15,9],[15,11],[10,10],[10,12],
+  [18,2],[18,4],[16,4],[16,6],[20,1],[20,3],[19,6],[19,8],[17,6],[17,8],[21,4],[21,6],
+  [18,13],[18,15],[16,15],[16,17],
+  [4,18],[4,20],[2,20],[2,22],[8,20],[8,22],[6,18],[6,20]];
+for (const [gx, gy] of extraFlats) if (gx < GRID && gy < GRID) heightMap[gy][gx] = 0;
+
+// ===== Cliff Wall & Waterfall Zone =====
+// Force cliff heights along back edge (gy=0)
+const cliffHeights = [
+  { gx: 16, gy: 0, h: 7 },   // cliff shoulder
+  { gx: 17, gy: 0, h: 8 },   // cliff tapers left
+  { gx: 18, gy: 0, h: 9 },   // cliff tapers left
+  { gx: 19, gy: 0, h: 10 },  // main cliff wall
+  { gx: 20, gy: 0, h: 10 },  // main cliff wall — waterfall source
+  { gx: 21, gy: 0, h: 10 },  // main cliff wall — waterfall source
+  { gx: 22, gy: 0, h: 10 },  // main cliff wall — waterfall source
+  { gx: 23, gy: 0, h: 10 },  // main cliff wall
+];
+for (const c of cliffHeights) {
+  heightMap[c.gy][c.gx] = c.h;
+}
+// Waterfall source tiles (3 wide at h=10)
+const waterfallSources = [
+  { gx: 20, gy: 0, h: 10 },
+  { gx: 21, gy: 0, h: 10 },
+  { gx: 22, gy: 0, h: 10 },
+];
+// Splash zone — where water lands (river tiles)
+const waterfallSplashZone = [
+  { gx: 22, gy: 1 },
+  { gx: 23, gy: 1 },
+  { gx: 21, gy: 2 },
+];
+// Precompute splash iso positions for randomized particle spawning
+let waterfallSplashPositions = [];
+function recomputeWaterfallSplash() {
+  waterfallSplashPositions = waterfallSplashZone.map(s => {
+    const iso = toIso(s.gx, s.gy);
+    return { x: iso.x, y: iso.y };
+  });
+}
+recomputeWaterfallSplash();
+
+// ===== Building Draw Functions =====
+function drawCottage(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE, TILE, BLK * 2, '#D4A76A', '#C49558', '#B8894E');
+  drawIsoBlock(x, py - BLK * 2, TILE, TILE, BLK * 1.5, '#E8D5B7', '#D4C4A4', '#C4B494');
+  drawIsoBlock(x, py - BLK * 3.5, TILE + 4, TILE + 4, BLK * 1.2, '#922B21', '#7B241E', '#6B1F19');
+  drawIsoBlock(x + 12, py - BLK * 4.7, 8, 8, BLK * 1.5, '#6B6B6B', '#555', '#4A4A4A');
+  drawIsoBlock(x - 6, py, 8, 8, BLK * 1.4, '#5C3317', '#4A2810', '#3D2008');
+  drawIsoBlock(x + 8, py - BLK * 1.2, 6, 6, 6, '#4A90D9', '#3B7BC4', '#2D66AF');
+}
+function drawFarm(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE, TILE, BLK * 2, '#C0392B', '#A93226', '#922B21');
+  drawIsoBlock(x, py - BLK * 2, TILE + 2, TILE + 2, BLK * 1.5, '#7B241E', '#6B1F19', '#5B1A14');
+  drawIsoBlock(x - 5, py, 12, 12, BLK * 1.5, '#5C3317', '#4A2810', '#3D2008');
+  const { x: wx, y: wy } = toIso(gx + 1, gy);
+  drawIsoBlock(wx, wy + yOff, TILE, TILE, BLK * 0.4, '#DAA520', '#C89418', '#B88514');
+  drawIsoBlock(wx, wy + yOff - BLK * 0.4, TILE - 8, TILE - 8, BLK * 0.3, '#CDBE70', '#BCA960', '#AB9850');
+}
+function drawWell(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE * 0.7, TILE * 0.7, BLK, '#7F8C8D', '#6B7778', '#5A6566');
+  drawIsoBlock(x, py - BLK * 0.6, TILE * 0.45, TILE * 0.45, BLK * 0.3, '#2980B9', '#2471A3', '#1F618D');
+  drawIsoBlock(x - 8, py - BLK, 4, 4, BLK * 2, '#6B4226', '#5A3820', '#4D301B');
+  drawIsoBlock(x + 8, py - BLK, 4, 4, BLK * 2, '#6B4226', '#5A3820', '#4D301B');
+  drawIsoBlock(x, py - BLK * 3, TILE * 0.6, TILE * 0.6, BLK * 0.4, '#922B21', '#7B241E', '#6B1F19');
+}
+function drawGarden(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  const colors = [['#FF69B4','#E55A9F','#CC4F8E'],['#FFD700','#E5C200','#CCAD00'],['#FF6347','#E55A3F','#CC5038'],['#9B59B6','#8E51A8','#7D479A']];
+  const offsets = [[-8,-4],[8,-4],[-8,4],[8,4]];
+  for (let i = 0; i < 4; i++) drawIsoBlock(x + offsets[i][0], py + offsets[i][1], 14, 14, BLK * 0.5, colors[i][0], colors[i][1], colors[i][2]);
+  drawIsoBlock(x - 18, py, 3, 3, BLK * 0.8, '#6B4226', '#5A3820', '#4D301B');
+  drawIsoBlock(x + 18, py, 3, 3, BLK * 0.8, '#6B4226', '#5A3820', '#4D301B');
+}
+function drawWindmillBody(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE * 0.7, TILE * 0.7, BLK * 1.5, '#E8D5B7', '#D4C4A4', '#C4B494');
+  drawIsoBlock(x, py - BLK * 1.5, TILE * 0.55, TILE * 0.55, BLK * 3, '#D4C4A4', '#C4B494', '#B4A484');
+  drawIsoBlock(x, py - BLK * 4.5, TILE * 0.45, TILE * 0.45, BLK * 0.8, '#922B21', '#7B241E', '#6B1F19');
+}
+function drawWindmillBlades(gx, gy, yOff, t) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  ctx.save(); ctx.translate(x, py - BLK * 4); ctx.rotate(t * 1.5);
+  ctx.strokeStyle = '#6B4226'; ctx.lineWidth = 2.5;
+  for (let i = 0; i < 4; i++) {
+    ctx.save(); ctx.rotate(i * Math.PI / 2);
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -22); ctx.stroke();
+    ctx.fillStyle = 'rgba(210,190,160,0.7)'; ctx.fillRect(-4, -22, 8, 10);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+function drawMarket(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE, TILE, BLK * 1.5, '#D4A76A', '#C49558', '#B8894E');
+  drawIsoBlock(x, py - BLK * 1.5, TILE, TILE, BLK, '#E8D5B7', '#D4C4A4', '#C4B494');
+  drawIsoBlock(x, py - BLK * 2.5, TILE + 8, TILE + 8, BLK * 0.3, '#C0392B', '#A93226', '#922B21');
+  drawIsoBlock(x - 8, py, TILE * 0.4, TILE * 0.4, BLK * 0.8, '#8B6914', '#7A5C10', '#6B500E');
+  drawIsoBlock(x - 8, py - BLK * 0.8, 8, 8, 4, '#27AE60', '#229954', '#1E8449');
+}
+function drawBlacksmith(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE, TILE, BLK * 2, '#6B6B6B', '#5A5A5A', '#4A4A4A');
+  drawIsoBlock(x, py - BLK * 2, TILE, TILE, BLK * 1.2, '#7F8C8D', '#6B7778', '#5A6566');
+  drawIsoBlock(x, py - BLK * 3.2, TILE + 2, TILE + 2, BLK * 0.8, '#3D2B1F', '#332418', '#2B1E14');
+  drawIsoBlock(x + 14, py - BLK * 4, 10, 10, BLK * 2, '#4A4A4A', '#3D3D3D', '#333');
+  drawIsoBlock(x - 14, py, 10, 10, BLK * 0.6, '#4A4A4A', '#3D3D3D', '#333');
+}
+function drawTavern(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE, TILE, BLK * 2.5, '#5C3317', '#4A2810', '#3D2008');
+  drawIsoBlock(x, py - BLK * 2.5, TILE, TILE, BLK * 2, '#6B4226', '#5A3820', '#4D301B');
+  drawIsoBlock(x, py - BLK * 4.5, TILE + 4, TILE + 4, BLK, '#3D2B1F', '#332418', '#2B1E14');
+  drawIsoBlock(x - 6, py - BLK * 1.5, 7, 7, 6, '#FDB813', '#E8A810', '#D4980E');
+  drawIsoBlock(x + 8, py - BLK * 1.5, 7, 7, 6, '#FDB813', '#E8A810', '#D4980E');
+  drawIsoBlock(x, py, 10, 10, BLK * 1.8, '#3D2B1F', '#332418', '#2B1E14');
+}
+function drawChapel(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE, TILE, BLK * 2, '#E8E8E0', '#D4D4CC', '#C4C4BC');
+  drawIsoBlock(x, py - BLK * 2, TILE * 0.9, TILE * 0.9, BLK * 2.5, '#F0F0E8', '#E0E0D8', '#D0D0C8');
+  drawIsoBlock(x, py - BLK * 4.5, TILE * 0.4, TILE * 0.4, BLK * 3, '#D4D4CC', '#C4C4BC', '#B4B4AC');
+  drawIsoBlock(x, py - BLK * 7.5, 4, 4, BLK * 0.8, '#DAA520', '#C89418', '#B88514');
+  drawIsoBlock(x, py - BLK * 7, 10, 4, 3, '#DAA520', '#C89418', '#B88514');
+  drawIsoBlock(x, py, 10, 10, BLK * 1.5, '#5C3317', '#4A2810', '#3D2008');
+}
+function drawWatchtower(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE * 0.7, TILE * 0.7, BLK * 2, '#7F8C8D', '#6B7778', '#5A6566');
+  drawIsoBlock(x, py - BLK * 2, TILE * 0.6, TILE * 0.6, BLK * 2, '#6B6B6B', '#5A5A5A', '#4A4A4A');
+  drawIsoBlock(x, py - BLK * 4, TILE * 0.55, TILE * 0.55, BLK * 2, '#7F8C8D', '#6B7778', '#5A6566');
+  drawIsoBlock(x, py - BLK * 6, TILE * 0.5, TILE * 0.5, BLK * 2, '#6B6B6B', '#5A5A5A', '#4A4A4A');
+  drawIsoBlock(x, py - BLK * 8, TILE * 0.65, TILE * 0.65, BLK * 0.5, '#7F8C8D', '#6B7778', '#5A6566');
+  ctx.strokeStyle = '#6B4226'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(x, py - BLK * 8.5); ctx.lineTo(x, py - BLK * 10.5); ctx.stroke();
+  ctx.fillStyle = '#C0392B';
+  ctx.beginPath(); ctx.moveTo(x, py - BLK * 10.5); ctx.lineTo(x + 10, py - BLK * 10); ctx.lineTo(x, py - BLK * 9.5); ctx.fill();
+}
+// === MORE BUILDINGS ===
+function drawLibrary(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE, TILE, BLK * 2.5, '#D4C4A4', '#C4B494', '#B4A484');
+  drawIsoBlock(x, py - BLK * 2.5, TILE * 0.9, TILE * 0.9, BLK * 2, '#E8D5B7', '#D4C4A4', '#C4B494');
+  drawIsoBlock(x, py - BLK * 4.5, TILE + 2, TILE + 2, BLK * 1.2, '#5C3317', '#4A2810', '#3D2008');
+  drawIsoBlock(x - 6, py - BLK * 1.5, 5, 5, 5, '#4A90D9', '#3B7BC4', '#2D66AF');
+  drawIsoBlock(x + 6, py - BLK * 1.5, 5, 5, 5, '#4A90D9', '#3B7BC4', '#2D66AF');
+  drawIsoBlock(x - 6, py - BLK * 3.5, 5, 5, 5, '#4A90D9', '#3B7BC4', '#2D66AF');
+  drawIsoBlock(x + 6, py - BLK * 3.5, 5, 5, 5, '#4A90D9', '#3B7BC4', '#2D66AF');
+}
+function drawBakery(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE, TILE, BLK * 2, '#D4A76A', '#C49558', '#B8894E');
+  drawIsoBlock(x, py - BLK * 2, TILE, TILE, BLK * 1.5, '#E8D5B7', '#D4C4A4', '#C4B494');
+  drawIsoBlock(x, py - BLK * 3.5, TILE + 4, TILE + 4, BLK, '#922B21', '#7B241E', '#6B1F19');
+  drawIsoBlock(x - 10, py - BLK * 4.5, 10, 10, BLK * 2, '#6B6B6B', '#555', '#4A4A4A');
+  drawIsoBlock(x + 10, py, 8, 8, BLK * 0.6, '#DAA520', '#C89418', '#B88514');
+}
+function drawFishingHut(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x - 8, py, 4, 4, BLK * 1.5, '#6B4226', '#5A3820', '#4D301B');
+  drawIsoBlock(x + 8, py, 4, 4, BLK * 1.5, '#6B4226', '#5A3820', '#4D301B');
+  drawIsoBlock(x, py - BLK * 1.5, TILE * 0.8, TILE * 0.8, BLK * 0.4, '#8B6914', '#7A5C10', '#6B500E');
+  drawIsoBlock(x, py - BLK * 1.9, TILE * 0.6, TILE * 0.6, BLK * 1.5, '#8B7355', '#7A6548', '#6B573C');
+  drawIsoBlock(x, py - BLK * 3.4, TILE * 0.75, TILE * 0.75, BLK * 0.8, '#DAA520', '#C89418', '#B88514');
+}
+function drawBridgeBuilding(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE * 1.2, TILE * 1.2, BLK * 0.6, '#8B6914', '#7A5C10', '#6B500E');
+  drawIsoBlock(x - 14, py, 3, 3, BLK * 1.2, '#6B4226', '#5A3820', '#4D301B');
+  drawIsoBlock(x + 14, py, 3, 3, BLK * 1.2, '#6B4226', '#5A3820', '#4D301B');
+  drawIsoBlock(x, py + BLK * 0.3, TILE * 0.3, TILE * 0.3, BLK * 0.8, '#5C3317', '#4A2810', '#3D2008');
+}
+function drawStable(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE * 1.1, TILE * 1.1, BLK * 2.5, '#8B6914', '#7A5C10', '#6B500E');
+  drawIsoBlock(x, py - BLK * 2.5, TILE * 1.1, TILE * 1.1, BLK * 1.5, '#A0522D', '#8B4513', '#7A3B10');
+  drawIsoBlock(x - 8, py, 10, 10, BLK * 0.8, '#DAA520', '#C89418', '#B88514');
+  drawIsoBlock(x + 6, py, 10, 10, BLK * 1.5, '#3D2008', '#2D1806', '#1D1004');
+}
+function drawLighthouse(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE * 0.7, TILE * 0.7, BLK * 2, '#E8E8E0', '#D4D4CC', '#C4C4BC');
+  drawIsoBlock(x, py - BLK * 2, TILE * 0.55, TILE * 0.55, BLK * 2, '#C0392B', '#A93226', '#922B21');
+  drawIsoBlock(x, py - BLK * 4, TILE * 0.45, TILE * 0.45, BLK * 2, '#F0F0E8', '#E0E0D8', '#D0D0C8');
+  drawIsoBlock(x, py - BLK * 6, TILE * 0.35, TILE * 0.35, BLK, '#C0392B', '#A93226', '#922B21');
+  drawIsoBlock(x, py - BLK * 7, TILE * 0.4, TILE * 0.4, BLK * 0.6, '#FDB813', '#E8A810', '#D4980E');
+  drawIsoBlock(x, py - BLK * 6, TILE * 0.5, TILE * 0.5, BLK * 0.3, '#6B6B6B', '#555', '#4A4A4A');
+}
+function drawBrewery(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE, TILE, BLK * 2.5, '#5C3317', '#4A2810', '#3D2008');
+  drawIsoBlock(x, py - BLK * 2.5, TILE, TILE, BLK * 1.5, '#6B4226', '#5A3820', '#4D301B');
+  drawIsoBlock(x, py - BLK * 4, TILE + 2, TILE + 2, BLK * 0.8, '#3D2B1F', '#332418', '#2B1E14');
+  drawIsoBlock(x + 12, py - BLK * 4.8, 8, 8, BLK * 1.2, '#B87333', '#A66628', '#945A20');
+  drawIsoBlock(x - 14, py, 6, 6, BLK * 0.8, '#5C3317', '#4A2810', '#3D2008');
+  drawIsoBlock(x - 10, py + 2, 6, 6, BLK * 0.8, '#5C3317', '#4A2810', '#3D2008');
+}
+function drawMine(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE * 0.8, TILE * 0.8, BLK * 2, '#6B6B6B', '#5A5A5A', '#4A4A4A');
+  drawIsoBlock(x, py, TILE * 0.5, TILE * 0.5, BLK * 1.5, '#2C2C2C', '#1A1A1A', '#111');
+  drawIsoBlock(x - 10, py, 4, 4, BLK * 2, '#6B4226', '#5A3820', '#4D301B');
+  drawIsoBlock(x + 10, py, 4, 4, BLK * 2, '#6B4226', '#5A3820', '#4D301B');
+  drawIsoBlock(x, py - BLK * 2, TILE * 0.55, TILE * 0.55, BLK * 0.4, '#6B4226', '#5A3820', '#4D301B');
+  drawIsoBlock(x + 14, py + 2, 8, 8, BLK * 0.5, '#95A5A6', '#849494', '#738484');
+}
+function drawCastle(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE * 1.2, TILE * 1.2, BLK * 3, '#7F8C8D', '#6B7778', '#5A6566');
+  drawIsoBlock(x, py - BLK * 3, TILE * 1.1, TILE * 1.1, BLK * 3, '#95A5A6', '#849494', '#738484');
+  drawIsoBlock(x, py - BLK * 6, TILE * 1.2, TILE * 1.2, BLK * 0.5, '#7F8C8D', '#6B7778', '#5A6566');
+  drawIsoBlock(x - 16, py - BLK, TILE * 0.4, TILE * 0.4, BLK * 7, '#6B6B6B', '#5A5A5A', '#4A4A4A');
+  drawIsoBlock(x - 16, py - BLK * 8, TILE * 0.5, TILE * 0.5, BLK * 0.8, '#7F8C8D', '#6B7778', '#5A6566');
+  drawIsoBlock(x + 16, py - BLK, TILE * 0.4, TILE * 0.4, BLK * 7, '#6B6B6B', '#5A5A5A', '#4A4A4A');
+  drawIsoBlock(x + 16, py - BLK * 8, TILE * 0.5, TILE * 0.5, BLK * 0.8, '#7F8C8D', '#6B7778', '#5A6566');
+  drawIsoBlock(x, py, 12, 12, BLK * 2, '#3D2B1F', '#332418', '#2B1E14');
+  ctx.strokeStyle = '#6B4226'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(x, py - BLK * 6.5); ctx.lineTo(x, py - BLK * 9); ctx.stroke();
+  ctx.fillStyle = '#C0392B';
+  ctx.beginPath(); ctx.moveTo(x, py - BLK * 9); ctx.lineTo(x + 8, py - BLK * 8.5); ctx.lineTo(x, py - BLK * 8); ctx.fill();
+}
+function drawGranary(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE * 0.8, TILE * 0.8, BLK * 3, '#DAA520', '#C89418', '#B88514');
+  drawIsoBlock(x, py - BLK * 3, TILE * 0.65, TILE * 0.65, BLK * 2, '#CDBE70', '#BCA960', '#AB9850');
+  drawIsoBlock(x, py - BLK * 5, TILE * 0.5, TILE * 0.5, BLK * 1, '#8B6914', '#7A5C10', '#6B500E');
+}
+function drawBarracks(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE * 1.2, TILE * 0.8, BLK * 2, '#7F8C8D', '#6B7778', '#5A6566');
+  drawIsoBlock(x, py - BLK * 2, TILE * 1.2, TILE * 0.8, BLK * 1.5, '#95A5A6', '#849494', '#738484');
+  drawIsoBlock(x, py - BLK * 3.5, TILE * 1.3, TILE * 0.9, BLK * 0.6, '#6B6B6B', '#5A5A5A', '#4A4A4A');
+  drawIsoBlock(x + 18, py, 6, 6, BLK * 2.5, '#5C3317', '#4A2810', '#3D2008');
+  drawIsoBlock(x + 18, py - BLK * 2.5, 3, 3, BLK * 0.5, '#95A5A6', '#849494', '#738484');
+}
+function drawApothecary(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE * 0.8, TILE * 0.8, BLK * 2, '#E8D5B7', '#D4C4A4', '#C4B494');
+  drawIsoBlock(x, py - BLK * 2, TILE * 0.8, TILE * 0.8, BLK * 1.5, '#F0F0E8', '#E0E0D8', '#D0D0C8');
+  drawIsoBlock(x, py - BLK * 3.5, TILE * 0.9, TILE * 0.9, BLK * 0.5, '#27AE60', '#229954', '#1E8449');
+  drawIsoBlock(x - 6, py - BLK * 1, 4, 4, 6, '#8E44AD', '#7D3C9B', '#6C3489');
+  drawIsoBlock(x + 2, py - BLK * 1, 4, 4, 8, '#E74C3C', '#D44338', '#C03A30');
+  drawIsoBlock(x + 8, py - BLK * 1, 4, 4, 5, '#3498DB', '#2E86C1', '#2874A6');
+}
+function drawFountain(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE * 0.9, TILE * 0.9, BLK * 0.8, '#95A5A6', '#849494', '#738484');
+  drawIsoBlock(x, py - BLK * 0.8, TILE * 0.6, TILE * 0.6, BLK * 0.4, '#2980B9', '#2471A3', '#1F618D');
+  drawIsoBlock(x, py - BLK * 1.2, 6, 6, BLK * 2, '#7F8C8D', '#6B7778', '#5A6566');
+  drawIsoBlock(x, py - BLK * 3.2, TILE * 0.3, TILE * 0.3, BLK * 0.3, '#95A5A6', '#849494', '#738484');
+}
+function drawDock(gx, gy, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  drawIsoBlock(x, py, TILE * 1.3, TILE * 0.7, BLK * 0.4, '#8B6914', '#7A5C10', '#6B500E');
+  drawIsoBlock(x - 16, py, 4, 4, BLK * 1.2, '#6B4226', '#5A3820', '#4D301B');
+  drawIsoBlock(x + 16, py, 4, 4, BLK * 1.2, '#6B4226', '#5A3820', '#4D301B');
+  drawIsoBlock(x, py + 3, 4, 4, BLK * 1, '#6B4226', '#5A3820', '#4D301B');
+  drawIsoBlock(x + 6, py - BLK * 0.4, 8, 8, BLK * 0.6, '#5C3317', '#4A2810', '#3D2008');
+}
+
+const buildingDrawFns = {
+  'Cottage': drawCottage, 'Farm': drawFarm, 'Well': drawWell,
+  'Garden': drawGarden, 'Windmill': drawWindmillBody, 'Market': drawMarket,
+  'Blacksmith': drawBlacksmith, 'Tavern': drawTavern,
+  'Chapel': drawChapel, 'Watchtower': drawWatchtower,
+  'Library': drawLibrary, 'Bakery': drawBakery,
+  'Fishing Hut': drawFishingHut, 'Bridge': drawBridgeBuilding,
+  'Stable': drawStable, 'Lighthouse': drawLighthouse,
+  'Brewery': drawBrewery, 'Mine': drawMine,
+  'Castle': drawCastle, 'Granary': drawGranary,
+  'Barracks': drawBarracks, 'Apothecary': drawApothecary,
+  'Fountain': drawFountain, 'Dock': drawDock,
+};
+
+// ===== Trees & Rocks (procedural) =====
+const treesData = [];
+const rocks = [];
+const buildingSet = new Set(buildings.map(b => `${b.gx},${b.gy}`));
+
+for (let gy = 0; gy < GRID; gy++) {
+  for (let gx = 0; gx < GRID; gx++) {
+    const key = `${gx},${gy}`;
+    if (tileTypes[key]) continue;
+    if (buildingSet.has(key)) continue;
+    // Skip near buildings
+    let nearBuilding = false;
+    for (const b of buildings) { if (Math.abs(b.gx - gx) <= 1 && Math.abs(b.gy - gy) <= 1) { nearBuilding = true; break; } }
+    if (nearBuilding) continue;
+
+    const seed = gx * 31 + gy * 17;
+    const val = Math.abs(Math.sin(seed * 127.1 + 0.7) * 43758.5453 % 1);
+
+    if (val < 0.08) {
+      treesData.push({ gx, gy, h: 1.5 + (val * 20) % 2, type: (gx + gy) % 3 === 0 ? 'pine' : 'oak' });
+    } else if (val > 0.96) {
+      rocks.push({ gx, gy, h: 0.5 + (val * 10) % 1 });
+    }
+  }
+}
+
+function drawTree(gx, gy, h, type, yOff) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff, bh = BLK * h;
+  if (type === 'pine') {
+    drawIsoBlock(x, py, 6, 6, BLK * 1.5, '#6B4226', '#5A3820', '#4D301B');
+    drawIsoBlock(x, py - BLK * 1.5, TILE * 0.6, TILE * 0.6, bh, '#2D5A27', '#256B20', '#1E5A1A');
+    drawIsoBlock(x, py - BLK * 1.5 - bh, TILE * 0.45, TILE * 0.45, bh * 0.7, '#3A7D32', '#328A2A', '#2A7522');
+    drawIsoBlock(x, py - BLK * 1.5 - bh * 1.7, TILE * 0.3, TILE * 0.3, bh * 0.5, '#4A9D42', '#42A83A', '#3A9332');
+  } else {
+    drawIsoBlock(x, py, 6, 6, BLK * 1.2, '#6B4226', '#5A3820', '#4D301B');
+    drawIsoBlock(x, py - BLK * 1.2, TILE * 0.55, TILE * 0.55, bh, '#3A7D32', '#328A2A', '#2A7522');
+    drawIsoBlock(x + 4, py - BLK * 1.2 - bh, TILE * 0.45, TILE * 0.45, bh * 0.6, '#4A9D42', '#42A83A', '#3A9332');
+    drawIsoBlock(x - 3, py - BLK * 1.2 - bh * 0.5, TILE * 0.35, TILE * 0.35, bh * 0.5, '#58B850', '#50A848', '#489840');
+  }
+}
+function drawRock(gx, gy, h, yOff) {
+  const { x, y } = toIso(gx, gy);
+  drawIsoBlock(x, y + yOff, TILE * 0.5, TILE * 0.5, BLK * h, '#7F8C8D', '#6B7778', '#5A6566');
+  drawIsoBlock(x + 5, y + yOff - BLK * h * 0.3, TILE * 0.3, TILE * 0.3, BLK * h * 0.6, '#95A5A6', '#849494', '#738484');
+}
+
+// ===== Pre-computed walkable neighbors =====
+const walkableList = [];
+for (const key of pathSet) {
+  const [gx, gy] = key.split(',').map(Number);
+  if (gx < GRID && gy < GRID) walkableList.push([gx, gy]);
+}
+const neighborCache = new Map();
+for (const [gx, gy] of walkableList) {
+  neighborCache.set(`${gx},${gy}`, walkableList.filter(([nx, ny]) =>
+    Math.abs(nx - gx) + Math.abs(ny - gy) <= 2 && (nx !== gx || ny !== gy)));
+}
+
+// ===== FULL SCENE CACHE =====
+let sceneCache = null;
+let sceneCacheReady = false;
+let sceneOffCanvas = null;
+
+function buildSceneCache() {
+  if (!sceneOffCanvas) {
+    sceneOffCanvas = document.createElement('canvas');
+    sceneOffCanvas.width = SCENE_W * dpr;
+    sceneOffCanvas.height = SCENE_H * dpr;
+  }
+  const offCtx = sceneOffCanvas.getContext('2d');
+  offCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  offCtx.clearRect(0, 0, SCENE_W, SCENE_H);
+  const mainCtx = ctx;
+  ctx = offCtx;
+
+  const allObjects = [];
+  for (let gy = 0; gy < GRID; gy++)
+    for (let gx = 0; gx < GRID; gx++) {
+      const [rx, ry] = rotateGrid(gx, gy);
+      allObjects.push({ kind: 'ground', gx, gy, depth: rx + ry });
+    }
+
+  for (const t of treesData) { const [rx, ry] = rotateGrid(t.gx, t.gy); allObjects.push({ kind: 'tree', gx: t.gx, gy: t.gy, h: t.h, treeType: t.type, depth: rx + ry + 0.01 }); }
+  for (const r of rocks) { const [rx, ry] = rotateGrid(r.gx, r.gy); allObjects.push({ kind: 'rock', gx: r.gx, gy: r.gy, h: r.h, depth: rx + ry + 0.01 }); }
+  for (let i = 0; i < buildings.length; i++) {
+    const b = buildings[i];
+    const [rx, ry] = rotateGrid(b.gx, b.gy);
+    allObjects.push({ kind: 'building', idx: i, gx: b.gx, gy: b.gy, depth: rx + ry + 0.02 });
+  }
+  allObjects.sort((a, b) => a.depth - b.depth);
+
+  for (const obj of allObjects) {
+    const th = heightMap[obj.gy]?.[obj.gx] || 0;
+
+    if (obj.kind === 'ground') {
+      const gc = getGroundColor(obj.gx, obj.gy);
+      const key = `${obj.gx},${obj.gy}`;
+      const isWater = tileTypes[key] === 'water';
+      const isBridge = tileTypes[key] === 'bridge';
+      const depth = (obj.gx + obj.gy) / (GRID * 2);
+      ctx.globalAlpha = 1 - depth * 0.08;
+
+      if (isWater) {
+        drawGridBlock(obj.gx, obj.gy, BLK * 0.4 + th * BLK, '#2980B9', '#2471A3', '#1F618D');
+      } else if (isBridge) {
+        drawGridBlock(obj.gx, obj.gy, BLK * 0.4, '#2980B9', '#2471A3', '#1F618D');
+        drawGridBlock(obj.gx, obj.gy, BLK * 0.6, '#8B6914', '#7A5C10', '#6B500E');
+      } else {
+        if (th > 0) {
+          if (th >= 4) {
+            drawGridBlock(obj.gx, obj.gy, th * BLK, '#6B6B6B', '#484848', '#383838');
+            // Cliff edge highlight
+            const ciso = isoCache[obj.gy]?.[obj.gx] || toIso(obj.gx, obj.gy);
+            ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 0.8;
+            const chw = TILE / 2, chd = TILE / 4, ch = th * BLK;
+            ctx.beginPath();
+            ctx.moveTo(ciso.x - chw, ciso.y + chd - ch);
+            ctx.lineTo(ciso.x, ciso.y - ch);
+            ctx.lineTo(ciso.x + chw, ciso.y + chd - ch);
+            ctx.stroke();
+          } else {
+            drawGridBlock(obj.gx, obj.gy, th * BLK, '#6B4226', '#5A3820', '#4D301B');
+          }
+        }
+        drawGridBlock(obj.gx, obj.gy, BLK * 0.6 + th * BLK, gc.top, gc.left, gc.right);
+      }
+
+      // Ground textures
+      if (!isBridge) {
+        const giso = isoCache[obj.gy]?.[obj.gx] || toIso(obj.gx, obj.gy);
+        const gsy = giso.y - th * BLK - 2;
+        const gseed = obj.gx * 37 + obj.gy * 53;
+
+        if (!tileTypes[key]) {
+          // Grass variation: darker/lighter dots
+          for (let i = 0; i < 5; i++) {
+            const dx = Math.sin(gseed + i * 2.7) * 10;
+            const dy = Math.cos(gseed + i * 3.1) * 4;
+            ctx.fillStyle = (gseed + i) % 3 === 0 ? 'rgba(50,90,30,0.3)' : 'rgba(100,150,70,0.2)';
+            ctx.fillRect(giso.x + dx - 0.5, gsy + dy, 1, 1);
+          }
+        } else if (tileTypes[key] === 'path') {
+          // Path cobble pattern
+          for (let i = 0; i < 4; i++) {
+            const dx = Math.sin(gseed + i * 3.3) * 8;
+            const dy = Math.cos(gseed + i * 4.1) * 3;
+            ctx.fillStyle = (gseed + i) % 2 === 0 ? 'rgba(160,130,100,0.3)' : 'rgba(100,80,55,0.25)';
+            ctx.beginPath(); ctx.arc(giso.x + dx, gsy + dy, 1.5 + ((gseed + i * 7) % 3) * 0.3, 0, Math.PI * 2); ctx.fill();
+          }
+        } else if (tileTypes[key] === 'sand') {
+          // Sand speckle
+          for (let i = 0; i < 4; i++) {
+            const dx = Math.sin(gseed + i * 2.1) * 9;
+            const dy = Math.cos(gseed + i * 3.7) * 4;
+            ctx.fillStyle = (gseed + i) % 2 === 0 ? 'rgba(230,200,160,0.3)' : 'rgba(180,150,110,0.25)';
+            ctx.fillRect(giso.x + dx - 0.3, gsy + dy, 0.8, 0.8);
+          }
+        }
+      }
+
+      // Flower patches
+      if (!isWater && !isBridge && !tileTypes[key]) {
+        const seed = obj.gx * 17 + obj.gy * 31;
+        if (seed % 7 === 0) {
+          const iso = toIso(obj.gx, obj.gy);
+          const fcolors = ['#FF69B4', '#FFD700', '#FF6347', '#9B59B6', '#3498DB'];
+          for (let i = 0; i < 3; i++) {
+            ctx.fillStyle = fcolors[(seed + i) % 5];
+            ctx.globalAlpha = 0.6 * (1 - depth * 0.08);
+            ctx.beginPath();
+            ctx.arc(iso.x + Math.sin(seed + i * 2) * 10, iso.y + Math.cos(seed + i * 3) * 5 - 4, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+      ctx.globalAlpha = 1;
+
+    } else if (obj.kind === 'tree') {
+      // Tree shadow
+      const tiso = isoCache[obj.gy]?.[obj.gx] || toIso(obj.gx, obj.gy);
+      const tsh = obj.h * 0.6;
+      ctx.globalAlpha = 0.1; ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.ellipse(tiso.x + 12, tiso.y + TILE / 5, TILE * 0.25 * tsh, TILE * 0.1 * tsh, 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      drawTree(obj.gx, obj.gy, obj.h, obj.treeType, -th * BLK);
+
+    } else if (obj.kind === 'rock') {
+      // Rock shadow
+      const riso = isoCache[obj.gy]?.[obj.gx] || toIso(obj.gx, obj.gy);
+      ctx.globalAlpha = 0.1; ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.ellipse(riso.x + 6, riso.y + TILE / 6, TILE * 0.15, TILE * 0.06, 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      drawRock(obj.gx, obj.gy, obj.h, -th * BLK);
+
+    } else if (obj.kind === 'building') {
+      const b = buildings[obj.idx];
+      ctx.save();
+      if (!b.done && !b.next) ctx.globalAlpha = 0.35;
+      else if (b.next) ctx.globalAlpha = 0.6;
+      const drawFn = buildingDrawFns[b.name];
+      if (drawFn) drawFn(b.gx, b.gy, -(th * BLK));
+      ctx.restore();
+
+      if (b.done) {
+        const iso = toIso(b.gx, b.gy);
+        // Soft penumbra shadow
+        ctx.globalAlpha = 0.05; ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.ellipse(iso.x + 14, iso.y + TILE / 4 + 6, TILE / 1.8, TILE / 4.5, 0, 0, Math.PI * 2); ctx.fill();
+        // Primary shadow
+        ctx.globalAlpha = 0.12; ctx.fillStyle = '#000';
+        ctx.beginPath(); ctx.ellipse(iso.x + 12, iso.y + TILE / 4 + 4, TILE / 2.2, TILE / 5.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      const iso = toIso(b.gx, b.gy);
+      ctx.globalAlpha = b.done ? 0.85 : 0.4;
+      ctx.fillStyle = b.done ? '#2d2d2d' : '#555';
+      ctx.beginPath(); ctx.arc(iso.x + 20, iso.y - BLK * 2, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'white'; ctx.font = 'bold 8px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(b.num.toString(), iso.x + 20, iso.y - BLK * 2 + 0.5);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  ctx = mainCtx;
+  sceneCache = sceneOffCanvas;
+  sceneCacheReady = true;
+}
+
+buildSceneCache();
+
+// ===== Creatures =====
+const creatures = [];
+
+function darken(hex, amount) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgb(${r * (1 - amount) | 0},${g * (1 - amount) | 0},${b * (1 - amount) | 0})`;
+}
+
+function initCreatures() {
+  const villagerColors = [
+    { body: '#E74C3C', head: '#FDEBD0' }, { body: '#3498DB', head: '#FDEBD0' },
+    { body: '#27AE60', head: '#F5CBA7' }, { body: '#8E44AD', head: '#FDEBD0' },
+    { body: '#F39C12', head: '#F5CBA7' }, { body: '#1ABC9C', head: '#FDEBD0' },
+    { body: '#E67E22', head: '#F5CBA7' }, { body: '#2C3E50', head: '#FDEBD0' },
+    { body: '#D35400', head: '#F5CBA7' }, { body: '#16A085', head: '#FDEBD0' },
+    { body: '#8B0000', head: '#F5CBA7' }, { body: '#4A235A', head: '#FDEBD0' },
+  ];
+  for (let i = 0; i < 12; i++) {
+    const t = walkableList[Math.floor(Math.random() * walkableList.length)];
+    if (!t) continue;
+    const iso = toIso(t[0], t[1]);
+    const vc = villagerColors[i % villagerColors.length];
+    creatures.push({
+      type: 0, x: iso.x, y: iso.y - 6, tx: iso.x, ty: iso.y - 6,
+      gx: t[0], gy: t[1], speed: 0.3 + Math.random() * 0.2,
+      color: vc, bodyL: darken(vc.body, 0.15), bodyR: darken(vc.body, 0.25),
+      headL: darken(vc.head, 0.1), headR: darken(vc.head, 0.2),
+      walkTimer: 0, waitTime: Math.random() * 3,
+    });
+  }
+
+  // Chickens near farm
+  const farmB = buildings.find(b => b.name === 'Farm');
+  const fIso = toIso(farmB.gx, farmB.gy);
+  for (let i = 0; i < 5; i++) {
+    creatures.push({
+      type: 1, x: fIso.x + (Math.random() - 0.5) * 30, y: fIso.y - 4 + (Math.random() - 0.5) * 15,
+      vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.15,
+      homeX: fIso.x, homeY: fIso.y - 4, peckTimer: Math.random() * 2, pecking: false,
+    });
+  }
+
+  // Cat
+  const catIso = toIso(4, 10);
+  creatures.push({ type: 2, x: catIso.x, y: catIso.y - 5, tx: catIso.x, ty: catIso.y - 5, gx: 4, gy: 10, speed: 0.2, sitTimer: 0, sitting: false, tailWag: 0 });
+
+  // Dog
+  const dogIso = toIso(8, 12);
+  creatures.push({ type: 3, x: dogIso.x, y: dogIso.y - 5, tx: dogIso.x, ty: dogIso.y - 5, gx: 8, gy: 12, speed: 0.35, waitTime: 0 });
+
+  // Horses near stable
+  const stableB = buildings.find(b => b.name === 'Stable');
+  if (stableB) {
+    const sIso = toIso(stableB.gx, stableB.gy);
+    for (let i = 0; i < 2; i++) {
+      creatures.push({
+        type: 4, x: sIso.x + (i - 0.5) * 20, y: sIso.y - 6,
+        homeX: sIso.x, homeY: sIso.y - 6, vx: 0, vy: 0,
+        walkTimer: Math.random() * 6, grazing: true,
+        color: i === 0 ? '#6B4226' : '#2C2C2C',
+      });
+    }
+  }
+
+  // Fish in river
+  const riverList = [...riverTiles].map(k => k.split(',').map(Number)).filter(([gx,gy]) => gx < GRID && gy < GRID);
+  for (let i = 0; i < 5; i++) {
+    const rt = riverList[Math.floor(Math.random() * riverList.length)];
+    if (!rt) continue;
+    const iso = toIso(rt[0], rt[1]);
+    creatures.push({ type: 5, x: iso.x + (Math.random() - 0.5) * 15, y: iso.y + (Math.random() - 0.5) * 8,
+      jumpTimer: 2 + Math.random() * 8, jumpPhase: 0, jumpDuration: 0.4 });
+  }
+
+  // Birds
+  const doneBuildings = buildings.filter(b => b.done);
+  for (let i = 0; i < 4; i++) {
+    const b = doneBuildings.length ? doneBuildings[i % doneBuildings.length] : buildings[i % buildings.length];
+    const iso = toIso(b.gx, b.gy);
+    creatures.push({
+      type: 6, x: iso.x + (Math.random() - 0.5) * 10, y: iso.y - BLK * 5,
+      perchX: iso.x, perchY: iso.y - BLK * 5,
+      flying: false, flyTimer: 3 + Math.random() * 6, flyTarget: null, wingPhase: 0,
+    });
+  }
+}
+
+function updateCreatures(dt, time) {
+  const s = dt * 60;
+  for (const c of creatures) {
+    // Always update positions, skip draw if off-screen
+    if (c.type === 0) {
+      c.waitTime -= dt;
+      if (c.waitTime <= 0) {
+        const dx = c.tx - c.x, dy = c.ty - c.y, dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 1) {
+          const nb = neighborCache.get(`${c.gx},${c.gy}`);
+          if (nb && nb.length) { const next = nb[Math.floor(Math.random() * nb.length)]; const ni = toIso(next[0], next[1]); c.tx = ni.x; c.ty = ni.y - 6; c.gx = next[0]; c.gy = next[1]; c.waitTime = Math.random() * 1.5; }
+        } else { c.x += (dx / dist) * c.speed * s; c.y += (dy / dist) * c.speed * s; }
+      }
+      c.walkTimer += 0.08 * s;
+      if (!isInViewport(c.x, c.y)) continue;
+      const bobY = Math.sin(c.walkTimer * 4) * 0.8;
+      drawIsoBlock(c.x, c.y + bobY, 6, 6, 7, c.color.body, c.bodyL, c.bodyR);
+      drawIsoBlock(c.x, c.y + bobY - 7, 5, 5, 4, c.color.head, c.headL, c.headR);
+
+    } else if (c.type === 1) {
+      c.peckTimer -= dt;
+      if (c.peckTimer <= 0) { c.pecking = !c.pecking; c.peckTimer = c.pecking ? 0.3 + Math.random() * 0.5 : 1 + Math.random() * 2; if (!c.pecking) { c.vx = (Math.random() - 0.5) * 0.4; c.vy = (Math.random() - 0.5) * 0.2; } }
+      if (!c.pecking) { c.x += c.vx * s; c.y += c.vy * s; const dhx = c.homeX - c.x, dhy = c.homeY - c.y; if (dhx * dhx + dhy * dhy > 900) { c.vx += dhx * 0.005; c.vy += dhy * 0.005; } }
+      if (!isInViewport(c.x, c.y)) continue;
+      const po = c.pecking ? 2 : 0;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.ellipse(c.x, c.y - 2 + po, 3, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(c.x + 2, c.y - 4 + po * 1.5, 1.8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#F39C12'; ctx.beginPath(); ctx.arc(c.x + 4, c.y - 3.5 + po * 1.5, 0.8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#E74C3C'; ctx.beginPath(); ctx.arc(c.x + 2, c.y - 5.5 + po * 1.5, 1, 0, Math.PI * 2); ctx.fill();
+
+    } else if (c.type === 2) {
+      c.sitTimer -= dt; c.tailWag += 0.05 * s;
+      if (c.sitTimer <= 0) { c.sitting = !c.sitting; c.sitTimer = c.sitting ? 3 + Math.random() * 4 : 2 + Math.random() * 3; if (!c.sitting) { const nx = Math.max(0, Math.min(GRID - 1, c.gx + Math.floor(Math.random() * 3) - 1)); const ny = Math.max(0, Math.min(GRID - 1, c.gy + Math.floor(Math.random() * 3) - 1)); const ni = toIso(nx, ny); c.tx = ni.x; c.ty = ni.y - 5; c.gx = nx; c.gy = ny; } }
+      if (!c.sitting) { const dx = c.tx - c.x, dy = c.ty - c.y, dist = Math.sqrt(dx * dx + dy * dy); if (dist > 1) { c.x += (dx / dist) * c.speed * s; c.y += (dy / dist) * c.speed * s; } }
+      if (!isInViewport(c.x, c.y)) continue;
+      ctx.fillStyle = '#F39C12'; ctx.beginPath(); ctx.ellipse(c.x, c.y, 4, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(c.x + 3, c.y - 2, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#E67E22';
+      ctx.beginPath(); ctx.moveTo(c.x + 2, c.y - 3.5); ctx.lineTo(c.x + 1.5, c.y - 5.5); ctx.lineTo(c.x + 3.5, c.y - 3.5); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(c.x + 3.5, c.y - 3.5); ctx.lineTo(c.x + 4.5, c.y - 5.5); ctx.lineTo(c.x + 5, c.y - 3); ctx.fill();
+      ctx.strokeStyle = '#F39C12'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(c.x - 3.5, c.y); ctx.quadraticCurveTo(c.x - 6 + Math.sin(c.tailWag) * 2, c.y - 4, c.x - 4 + Math.sin(c.tailWag) * 2, c.y - 5); ctx.stroke();
+
+    } else if (c.type === 3) {
+      c.waitTime -= dt;
+      if (c.waitTime <= 0) { const dx = c.tx - c.x, dy = c.ty - c.y, dist = Math.sqrt(dx * dx + dy * dy); if (dist < 1) { const nx = Math.max(0, Math.min(GRID - 1, c.gx + Math.floor(Math.random() * 3) - 1)); const ny = Math.max(0, Math.min(GRID - 1, c.gy + Math.floor(Math.random() * 3) - 1)); const ni = toIso(nx, ny); c.tx = ni.x; c.ty = ni.y - 5; c.gx = nx; c.gy = ny; c.waitTime = Math.random() * 2; } else { c.x += (dx / dist) * c.speed * s; c.y += (dy / dist) * c.speed * s; } }
+      if (!isInViewport(c.x, c.y)) continue;
+      ctx.fillStyle = '#8B6914'; ctx.beginPath(); ctx.ellipse(c.x, c.y, 5, 3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(c.x + 4, c.y - 2, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#6B4226'; ctx.beginPath(); ctx.ellipse(c.x + 5.5, c.y - 1, 1.5, 2.5, 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#8B6914'; ctx.lineWidth = 1.5;
+      const wag = Math.sin(time * 6) * 3;
+      ctx.beginPath(); ctx.moveTo(c.x - 4.5, c.y - 1); ctx.quadraticCurveTo(c.x - 7, c.y - 4 + wag, c.x - 6, c.y - 6 + wag); ctx.stroke();
+
+    } else if (c.type === 4) { // horse
+      c.walkTimer -= dt;
+      if (c.walkTimer <= 0) { c.grazing = !c.grazing; c.walkTimer = c.grazing ? 3 + Math.random() * 4 : 2 + Math.random() * 2; if (!c.grazing) { c.vx = (Math.random() - 0.5) * 0.3; c.vy = (Math.random() - 0.5) * 0.15; } }
+      if (!c.grazing) { c.x += c.vx * s; c.y += c.vy * s; const dhx = c.homeX - c.x, dhy = c.homeY - c.y; if (dhx * dhx + dhy * dhy > 1200) { c.vx += dhx * 0.004; c.vy += dhy * 0.004; } }
+      if (!isInViewport(c.x, c.y)) continue;
+      const headDip = c.grazing ? 3 : 0;
+      ctx.fillStyle = c.color; ctx.beginPath(); ctx.ellipse(c.x, c.y, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(c.x + 7, c.y - 3 + headDip, 3, 2, 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = c.color; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(c.x - 4, c.y + 3); ctx.lineTo(c.x - 4, c.y + 8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(c.x + 4, c.y + 3); ctx.lineTo(c.x + 4, c.y + 8); ctx.stroke();
+
+    } else if (c.type === 5) { // fish
+      c.jumpTimer -= dt;
+      if (c.jumpTimer <= 0 && c.jumpPhase === 0) { c.jumpPhase = c.jumpDuration; c.jumpTimer = 3 + Math.random() * 10; }
+      if (c.jumpPhase > 0) {
+        c.jumpPhase -= dt;
+        if (!isInViewport(c.x, c.y)) continue;
+        const t2 = 1 - Math.max(0, c.jumpPhase) / c.jumpDuration;
+        const arcY = -Math.sin(t2 * Math.PI) * 12;
+        ctx.fillStyle = '#C0C0C0'; ctx.beginPath(); ctx.ellipse(c.x + t2 * 6, c.y + arcY, 3, 1.5, -0.3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#A0A0A0'; ctx.beginPath(); ctx.moveTo(c.x + t2 * 6 - 3, c.y + arcY); ctx.lineTo(c.x + t2 * 6 - 6, c.y + arcY - 2); ctx.lineTo(c.x + t2 * 6 - 6, c.y + arcY + 2); ctx.fill();
+        if (t2 < 0.15 || t2 > 0.85) { ctx.globalAlpha = 0.5; ctx.fillStyle = '#87CEEB'; ctx.beginPath(); ctx.arc(c.x, c.y, 3, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
+      }
+
+    } else if (c.type === 6) { // bird
+      c.flyTimer -= dt;
+      if (c.flyTimer <= 0 && !c.flying) {
+        c.flying = true;
+        const b = buildings[Math.floor(Math.random() * buildings.length)];
+        const iso = toIso(b.gx, b.gy);
+        c.flyTarget = { x: iso.x + (Math.random() - 0.5) * 10, y: iso.y - BLK * 5 };
+        c.flyTimer = 4 + Math.random() * 8;
+      }
+      if (c.flying && c.flyTarget) {
+        const dx = c.flyTarget.x - c.x, dy = c.flyTarget.y - c.y, dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 2) { c.flying = false; c.perchX = c.x; c.perchY = c.y; }
+        else { c.x += (dx / dist) * 1.5 * s; c.y += (dy / dist) * 1.5 * s; }
+      }
+      if (!isInViewport(c.x, c.y)) continue;
+      if (c.flying) {
+        c.wingPhase += 0.3 * s;
+        const ws = Math.sin(c.wingPhase) * 4;
+        ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(c.x - 4, c.y - ws); ctx.lineTo(c.x, c.y); ctx.lineTo(c.x + 4, c.y - ws); ctx.stroke();
+      } else {
+        ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(c.x, c.y, 1.5, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+}
+
+// ===== Weather =====
+let weatherMode = 'snow';
+const weatherParticles = [];
+const MAX_WEATHER = 100;
+
+let isoDiamondLeft, isoDiamondRight, isoDiamondTop, isoDiamondBottom;
+let cloudMinX, cloudMaxX, cloudAreaY;
+
+function recomputeBounds() {
+  isoDiamondLeft = toIso(0, GRID - 1).x - 10;
+  isoDiamondRight = toIso(GRID - 1, 0).x + 10;
+  isoDiamondTop = toIso(0, 0).y - 60;
+  isoDiamondBottom = toIso(GRID - 1, GRID - 1).y + 30;
+  cloudMinX = toIso(0, GRID - 1).x;
+  cloudMaxX = toIso(GRID - 1, 0).x;
+  cloudAreaY = toIso(0, 0).y;
+}
+recomputeBounds();
+
+function updateWeather(dt) {
+  const s = dt * 60;
+  if (weatherParticles.length < MAX_WEATHER && weatherMode !== 'clear') {
+    const spawnX = isoDiamondLeft + Math.random() * (isoDiamondRight - isoDiamondLeft);
+    if (weatherMode === 'snow') {
+      weatherParticles.push({ x: spawnX, y: isoDiamondTop, vx: Math.random() * 0.3 - 0.1, vy: 0.5 + Math.random() * 0.5, size: 1.5 + Math.random() * 2.5, wobble: Math.random() * Math.PI * 2, wobbleSpeed: 0.02 + Math.random() * 0.02 });
+    } else {
+      weatherParticles.push({ x: spawnX, y: isoDiamondTop, vx: -0.5, vy: 4 + Math.random() * 3, length: 6 + Math.random() * 8 });
+    }
+  }
+  let i = weatherParticles.length;
+  while (i--) {
+    const p = weatherParticles[i];
+    p.x += (p.vx || 0) * s; p.y += p.vy * s;
+    if (p.y > isoDiamondBottom || p.x < isoDiamondLeft - 20 || p.x > isoDiamondRight + 20) {
+      weatherParticles[i] = weatherParticles[weatherParticles.length - 1]; weatherParticles.pop(); continue;
+    }
+    if (!isInViewport(p.x, p.y, 20)) continue;
+    if (weatherMode === 'snow') {
+      p.wobble += p.wobbleSpeed * s; p.x += Math.sin(p.wobble) * 0.3 * s;
+      ctx.globalAlpha = 0.7; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.globalAlpha = 0.3; ctx.strokeStyle = '#7EB8DA'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - 1, p.y + p.length); ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ===== Clouds =====
+let clouds = [];
+function initClouds() {
+  clouds = [];
+  for (let i = 0; i < 8; i++) {
+    clouds.push({ x: cloudMinX + Math.random() * (cloudMaxX - cloudMinX), y: cloudAreaY - 30 + Math.random() * 35,
+      speed: 0.15 + Math.random() * 0.1, width: 40 + Math.random() * 30, height: 12 + Math.random() * 8, opacity: 0.15 + Math.random() * 0.1 });
+  }
+}
+initClouds();
+
+function drawClouds(dt) {
+  const s = dt * 60;
+  for (const cl of clouds) {
+    cl.x += cl.speed * s;
+    if (cl.x > cloudMaxX + cl.width) cl.x = cloudMinX - cl.width;
+    if (!isInViewport(cl.x, cl.y, 80)) continue;
+    ctx.globalAlpha = cl.opacity; ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(cl.x, cl.y, cl.width * 0.4, cl.height * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cl.x + cl.width * 0.25, cl.y - cl.height * 0.15, cl.width * 0.35, cl.height * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cl.x - cl.width * 0.2, cl.y + cl.height * 0.05, cl.width * 0.3, cl.height * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ===== Particles =====
+let particles = [];
+
+function updateParticles(dt) {
+  const s = dt * 60;
+  let i = particles.length;
+  while (i--) {
+    const p = particles[i];
+    p.life -= p.decay * s;
+    if (p.life <= 0) { particles[i] = particles[particles.length - 1]; particles.pop(); continue; }
+    p.x += (p.vx || 0) * s; p.y += (p.vy || 0) * s;
+    if (!isInViewport(p.x, p.y, 20)) continue;
+    if (p.type === 0) { ctx.globalAlpha = p.life * 0.4; ctx.fillStyle = '#bbb'; ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (1 + (1 - p.life) * 1.2), 0, Math.PI * 2); ctx.fill(); }
+    else if (p.type === 1) { const sy = p.y - (1 - p.life) * 18; ctx.globalAlpha = p.life * 0.9; ctx.fillStyle = '#E8B830'; ctx.beginPath(); ctx.arc(p.x, sy, p.size * p.life, 0, Math.PI * 2); ctx.fill(); }
+    else if (p.type === 2) { ctx.globalAlpha = p.life * 0.8; ctx.fillStyle = `rgb(255,${69 + p.life * 120 | 0},0)`; ctx.beginPath(); ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2); ctx.fill(); }
+    else if (p.type === 3) { ctx.globalAlpha = p.life * 0.35; ctx.fillStyle = '#8B7355'; ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (1 + (1 - p.life) * 0.8), 0, Math.PI * 2); ctx.fill(); }
+    else if (p.type === 4) { // waterfall splash
+      p.vy += 0.04 * s; // gravity
+      ctx.globalAlpha = p.life * 0.9;
+      ctx.fillStyle = p.life > 0.5 ? '#E0F4FF' : '#A8D8F0';
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (0.5 + p.life * 0.5), 0, Math.PI * 2); ctx.fill();
+      // bright white core
+      ctx.globalAlpha = p.life * 0.6;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 0.4, 0, Math.PI * 2); ctx.fill();
+    }
+    else if (p.type === 5) { // waterfall mist
+      const expandedSize = p.size * (1 + (1 - p.life) * 2.5);
+      ctx.globalAlpha = p.life * 0.35;
+      ctx.fillStyle = '#D0EAFF';
+      ctx.beginPath(); ctx.arc(p.x, p.y, expandedSize, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function spawnSmoke(gx, gy, h) {
+  const iso = toIso(gx, gy);
+  if (particles.length < 120) particles.push({ type: 0, x: iso.x + 12, y: iso.y - h - BLK * 4.7, vx: 0.12 + Math.random() * 0.08, vy: -0.35 - Math.random() * 0.25, life: 1, decay: 0.005 + Math.random() * 0.003, size: 2 + Math.random() * 2.5 });
+}
+function spawnSparkle(gx, gy, h) {
+  const iso = toIso(gx, gy);
+  if (particles.length < 120) particles.push({ type: 1, x: iso.x + (Math.random() - 0.5) * 25, y: iso.y - h / 2 + (Math.random() - 0.5) * 20, life: 1, decay: 0.012 + Math.random() * 0.008, size: 1 + Math.random() * 2 });
+}
+function spawnEmber(gx, gy) {
+  const iso = toIso(gx, gy);
+  if (particles.length < 120) particles.push({ type: 2, x: iso.x + 14 + (Math.random() - 0.5) * 8, y: iso.y - BLK * 4, vx: (Math.random() - 0.5) * 0.3, vy: -0.6 - Math.random() * 0.4, life: 1, decay: 0.015 + Math.random() * 0.01, size: 1.5 + Math.random() * 1.5 });
+}
+function spawnDust(gx, gy) {
+  const iso = toIso(gx, gy);
+  if (particles.length < 120) particles.push({ type: 3, x: iso.x + (Math.random() - 0.5) * 14, y: iso.y - BLK * 2 - Math.random() * 6, vx: 0.2 + Math.random() * 0.3, vy: -0.15 - Math.random() * 0.2, life: 1, decay: 0.008 + Math.random() * 0.005, size: 1.5 + Math.random() * 2 });
+}
+
+// ===== Waterfall Rendering =====
+function drawWaterfall(time) {
+  const hw = TILE / 2, hd = TILE / 4;
+
+  for (const src of waterfallSources) {
+    const iso = isoCache[src.gy]?.[src.gx] || toIso(src.gx, src.gy);
+    if (!isInViewport(iso.x, iso.y, 150)) continue;
+    const h = src.h * BLK;
+    const flowPhase = time * 3 + src.gx * 0.5;
+    const shimmer = Math.sin(flowPhase) * 0.1;
+
+    // A) Water layer on cliff top
+    const ww = TILE * 0.7, wd = TILE * 0.7;
+    const topHue = `hsl(200,${65 + shimmer * 20}%,${55 + shimmer * 10}%)`;
+    const leftHue = `hsl(200,${60 + shimmer * 15}%,${46 + shimmer * 8}%)`;
+    const rightHue = `hsl(200,${55 + shimmer * 10}%,${40 + shimmer * 6}%)`;
+    drawIsoBlock(iso.x, iso.y - h, ww, wd, BLK * 0.4, topHue, leftHue, rightHue);
+
+    // B) Water curtain on LEFT face of cliff
+    // Left face vertices: top-left, top-center, bottom-center, bottom-left
+    const topLeft = { x: iso.x - hw, y: iso.y + hd - h };
+    const topCenter = { x: iso.x, y: iso.y + hd * 2 - h };
+    const botCenter = { x: iso.x, y: iso.y + hd * 2 };
+    const botLeft = { x: iso.x - hw, y: iso.y + hd };
+
+    // Fill curtain with animated blue
+    ctx.globalAlpha = 0.65 + Math.sin(flowPhase) * 0.08;
+    const curtainHue = `hsl(200,${70 + shimmer * 15}%,${52 + shimmer * 10}%)`;
+    ctx.fillStyle = curtainHue;
+    ctx.beginPath();
+    ctx.moveTo(topLeft.x, topLeft.y);
+    ctx.lineTo(topCenter.x, topCenter.y);
+    ctx.lineTo(botCenter.x, botCenter.y);
+    ctx.lineTo(botLeft.x, botLeft.y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Animated white streaks flowing down the face
+    const faceW = topCenter.x - topLeft.x;
+    const faceH = botLeft.y - topLeft.y;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(topLeft.x, topLeft.y);
+    ctx.lineTo(topCenter.x, topCenter.y);
+    ctx.lineTo(botCenter.x, botCenter.y);
+    ctx.lineTo(botLeft.x, botLeft.y);
+    ctx.closePath();
+    ctx.clip();
+
+    for (let s = 0; s < 7; s++) {
+      const t = ((time * 1.8 + s * 0.14 + src.gx * 0.2) % 1);
+      const sx = topLeft.x + faceW * (0.15 + s * 0.1) + Math.sin(flowPhase + s) * 1.5;
+      const sy = topLeft.y + faceH * t;
+      const slope = (hd * 2) / hw; // isometric slope for left face
+      const sxEnd = sx + 0.5;
+      const syEnd = sy + Math.min(14, faceH * 0.18);
+      ctx.globalAlpha = 0.45 + Math.sin(flowPhase * 2 + s * 0.7) * 0.15;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5 - s * 0.1;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sxEnd, syEnd);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // C) Foam at cliff edge — white ellipses at top of curtain
+    ctx.globalAlpha = 0.6 + Math.sin(flowPhase * 2) * 0.2;
+    ctx.fillStyle = '#fff';
+    const edgeY = topLeft.y + (topCenter.y - topLeft.y) * 0.5;
+    const edgeX = (topLeft.x + topCenter.x) / 2;
+    ctx.beginPath(); ctx.ellipse(edgeX + Math.sin(flowPhase) * 3, edgeY, 7, 2.5, 0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(edgeX - 5 + Math.sin(flowPhase + 1) * 2, edgeY + 3, 5, 2, 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // D) Foam at base — where water hits river
+  const flowPhaseBase = time * 3;
+  for (let i = 0; i < waterfallSplashPositions.length; i++) {
+    const sp = waterfallSplashPositions[i];
+    if (!isInViewport(sp.x, sp.y, 100)) continue;
+    ctx.globalAlpha = 0.5 + Math.sin(flowPhaseBase * 1.5 + i * 1.2) * 0.2;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(sp.x + Math.sin(flowPhaseBase + i) * 4, sp.y + 2, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.35 + Math.sin(flowPhaseBase * 2 + i * 0.8) * 0.15;
+    ctx.beginPath(); ctx.ellipse(sp.x + 5, sp.y + 5, 8, 3, 0.2, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ===== Waterfall Splash & Mist Particles =====
+function spawnWaterfallSplash(x, y) {
+  if (particles.length < 180) particles.push({
+    type: 4, x: x + (Math.random() - 0.5) * 24, y: y,
+    vx: (Math.random() - 0.5) * 1.2, vy: -1.2 - Math.random() * 0.8,
+    life: 1, decay: 0.013 + Math.random() * 0.008,
+    size: 2 + Math.random() * 1,
+  });
+}
+function spawnWaterfallMist(x, y) {
+  if (particles.length < 180) particles.push({
+    type: 5, x: x + (Math.random() - 0.5) * 30, y: y - Math.random() * 8,
+    vx: -0.15 - Math.random() * 0.2, vy: -0.1 - Math.random() * 0.1,
+    life: 1, decay: 0.003 + Math.random() * 0.002,
+    size: 4 + Math.random() * 2,
+  });
+}
+
+initCreatures();
+
+// ===== Weather toggle =====
+const badge = document.querySelector('.badge');
+badge.addEventListener('click', () => {
+  const modes = ['snow', 'rain', 'clear'];
+  weatherMode = modes[(modes.indexOf(weatherMode) + 1) % modes.length];
+  weatherParticles.length = 0;
+  badge.textContent = weatherMode === 'snow' ? '\u2744\uFE0F Snow' : weatherMode === 'rain' ? '\uD83C\uDF27\uFE0F Rain' : '\u2600\uFE0F Clear';
+});
+badge.textContent = '\u2744\uFE0F Snow';
+
+// ===== Animation State =====
+let time = 0, lastFrame = 0, hoveredIdx = -1;
+let fpsFrames = 0, fpsLast = 0, fpsDisplay = 0;
+
+const windmillBuilding = buildings.find(b => b.name === 'Windmill');
+const cottageBuilding = buildings.find(b => b.name === 'Cottage');
+const blacksmithBuilding = buildings.find(b => b.name === 'Blacksmith');
+const tavernBuilding = buildings.find(b => b.name === 'Tavern');
+const bakeryBuilding = buildings.find(b => b.name === 'Bakery');
+const lighthouseBuilding = buildings.find(b => b.name === 'Lighthouse');
+const mineBuilding = buildings.find(b => b.name === 'Mine');
+
+// ===== MAIN RENDER LOOP =====
+function render(now) {
+  time = now * 0.001;
+  const dt = Math.min(0.05, (now - (lastFrame || now)) / 1000);
+  lastFrame = now;
+
+  fpsFrames++;
+  if (now - fpsLast >= 1000) { fpsDisplay = fpsFrames; fpsFrames = 0; fpsLast = now; }
+
+  // Rotation animation
+  if (rotationProgress < 1) {
+    // Animating between two cardinal angles
+    rotationProgress = Math.min(1, rotationProgress + dt / ROTATION_ANIM_DURATION);
+    // Ease-in-out (smooth cubic)
+    const t = rotationProgress;
+    const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    rotation = rotationFrom + (rotationTo - rotationFrom) * eased;
+    updateRotationTrig();
+    rebuildIsoCache();
+    recomputeBounds();
+    recomputeWaterfallSplash();
+    buildSceneCache();
+    if (rotationProgress >= 1) settleRotation();
+  }
+
+  // Smooth camera
+  camera.x += (camera.targetX - camera.x) * 0.12;
+  camera.y += (camera.targetY - camera.y) * 0.12;
+  camera.zoom += (camera.targetZoom - camera.zoom) * 0.12;
+
+  ctx.clearRect(0, 0, CSS_W, CSS_H);
+
+  // === Camera transform ===
+  ctx.save();
+  ctx.translate(CSS_W / 2, CSS_H / 2);
+  ctx.scale(camera.zoom, camera.zoom);
+  ctx.translate(-camera.x, -camera.y);
+
+  // Blit scene cache
+  if (sceneCacheReady) ctx.drawImage(sceneCache, 0, 0, SCENE_W, SCENE_H);
+
+  // Water shimmer
+  for (const [gx, gy] of waterTiles) {
+    if (gx >= GRID || gy >= GRID) continue;
+    const iso = isoCache[gy][gx];
+    if (!isInViewport(iso.x, iso.y)) continue;
+    const th = heightMap[gy][gx];
+    const sh = Math.sin(time * 2 + gx * 0.7 + gy * 0.5) * 0.12;
+    const depth = (gx + gy) / (GRID * 2);
+    ctx.globalAlpha = (1 - depth * 0.08) * 0.6;
+    drawGridBlock(gx, gy, BLK * 0.4 + th * BLK,
+      `hsl(204,${60 + sh * 20}%,${46 + sh * 10}%)`,
+      `hsl(204,${55 + sh * 15}%,${38 + sh * 8}%)`,
+      `hsl(204,${50 + sh * 10}%,${32 + sh * 6}%)`);
+    // Water caustics
+    for (let ci = 0; ci < 3; ci++) {
+      const cdx = Math.sin(gx * 37 + gy * 53 + ci * 2.5 + time * 0.5) * 8;
+      const cdy = Math.cos(gx * 37 + gy * 53 + ci * 3.3 + time * 0.3) * 4;
+      ctx.globalAlpha = 0.08;
+      ctx.fillStyle = '#A0DEFF';
+      ctx.beginPath(); ctx.ellipse(iso.x + cdx, iso.y + cdy - th * BLK - 2, 3, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Waterfall cascade
+  drawWaterfall(time);
+  // Waterfall splash & mist particles across the 3-tile base
+  if (Math.random() < 0.25) {
+    const sp = waterfallSplashPositions[Math.floor(Math.random() * waterfallSplashPositions.length)];
+    spawnWaterfallSplash(sp.x, sp.y);
+  }
+  if (Math.random() < 0.08) {
+    const sp = waterfallSplashPositions[Math.floor(Math.random() * waterfallSplashPositions.length)];
+    spawnWaterfallMist(sp.x, sp.y);
+  }
+  // Spray at mid-height on the cliff face
+  if (Math.random() < 0.06) {
+    const src = waterfallSources[Math.floor(Math.random() * waterfallSources.length)];
+    const iso = isoCache[src.gy]?.[src.gx] || toIso(src.gx, src.gy);
+    spawnWaterfallSplash(iso.x - TILE / 4, iso.y - src.h * BLK * 0.5);
+  }
+
+  // Windmill blades
+  if (windmillBuilding) {
+    const th = heightMap[windmillBuilding.gy]?.[windmillBuilding.gx] || 0;
+    ctx.globalAlpha = windmillBuilding.next ? 0.6 : (windmillBuilding.done ? 1 : 0.35);
+    drawWindmillBlades(windmillBuilding.gx, windmillBuilding.gy, -(th * BLK), time);
+    ctx.globalAlpha = 1;
+  }
+
+  // Next-to-unlock glow
+  if (windmillBuilding && windmillBuilding.next) {
+    const iso = toIso(windmillBuilding.gx, windmillBuilding.gy);
+    const glowR = 22 + Math.sin(time * 3) * 6;
+    const grad = ctx.createRadialGradient(iso.x, iso.y - BLK * 2, 0, iso.x, iso.y - BLK * 2, glowR);
+    grad.addColorStop(0, 'rgba(232,184,48,0.25)'); grad.addColorStop(1, 'rgba(232,184,48,0)');
+    ctx.fillStyle = grad; ctx.fillRect(iso.x - 35, iso.y - BLK * 5, 70, 60);
+    if (Math.random() < 0.04) spawnSparkle(windmillBuilding.gx, windmillBuilding.gy, BLK * 4);
+  }
+
+  // Cottage smoke
+  if (cottageBuilding && cottageBuilding.done && Math.random() < 0.03) spawnSmoke(cottageBuilding.gx, cottageBuilding.gy, heightMap[cottageBuilding.gy][cottageBuilding.gx] * BLK);
+
+  // Bakery smoke
+  if (bakeryBuilding && bakeryBuilding.done && Math.random() < 0.02) spawnSmoke(bakeryBuilding.gx, bakeryBuilding.gy, heightMap[bakeryBuilding.gy][bakeryBuilding.gx] * BLK);
+
+  // Forge embers
+  if (blacksmithBuilding && Math.random() < 0.03) spawnEmber(blacksmithBuilding.gx, blacksmithBuilding.gy);
+
+  // Mine dust
+  if (mineBuilding && mineBuilding.done && Math.random() < 0.025) spawnDust(mineBuilding.gx, mineBuilding.gy);
+
+  // Tavern warmth
+  if (tavernBuilding && !tavernBuilding.done) {
+    const iso = toIso(tavernBuilding.gx, tavernBuilding.gy);
+    ctx.globalAlpha = 0.05 + Math.sin(time * 2) * 0.03; ctx.fillStyle = '#FDB813';
+    ctx.beginPath(); ctx.arc(iso.x, iso.y - BLK * 2, 15, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+  }
+
+  // Lighthouse beam
+  if (lighthouseBuilding && lighthouseBuilding.done) {
+    const iso = toIso(lighthouseBuilding.gx, lighthouseBuilding.gy);
+    ctx.save(); ctx.globalAlpha = 0.08; ctx.translate(iso.x, iso.y - BLK * 7); ctx.rotate(time * 0.5);
+    ctx.fillStyle = '#FDB813'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-8, -60); ctx.lineTo(8, -60); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
+  // Hovered building lift
+  if (hoveredIdx >= 0) {
+    const b = buildings[hoveredIdx]; const th = heightMap[b.gy]?.[b.gx] || 0;
+    ctx.save();
+    if (!b.done && !b.next) ctx.globalAlpha = 0.35;
+    else if (b.next) ctx.globalAlpha = 0.6;
+    const drawFn = buildingDrawFns[b.name];
+    if (drawFn) drawFn(b.gx, b.gy, -(th * BLK) - 4, time);
+    ctx.restore();
+  }
+
+  updateCreatures(dt, time);
+  updateParticles(dt);
+
+  // Atmospheric clip
+  ctx.save();
+  ctx.beginPath();
+  const cTop = toIso(0, 0), cRight = toIso(GRID - 1, 0);
+  const cBottom = toIso(GRID - 1, GRID - 1), cLeft = toIso(0, GRID - 1);
+  ctx.moveTo(cTop.x, cTop.y - 120); ctx.lineTo(cRight.x + 30, cRight.y);
+  ctx.lineTo(cBottom.x, cBottom.y + 20); ctx.lineTo(cLeft.x - 30, cLeft.y);
+  ctx.closePath(); ctx.clip();
+  drawClouds(dt);
+  updateWeather(dt);
+  ctx.restore();
+
+  ctx.restore(); // end camera transform
+
+  // HUD (screen space)
+  ctx.globalAlpha = 0.7;
+  ctx.fillStyle = fpsDisplay >= 30 ? '#0f0' : fpsDisplay >= 15 ? '#ff0' : '#f00';
+  ctx.font = 'bold 12px monospace'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+  ctx.fillText('FPS: ' + fpsDisplay, CSS_W - 10, 50);
+  ctx.fillStyle = '#fff';
+  const step = Math.round(rotationTo / HALF_PI) % 4;
+  const dir = ['N','E','S','W'][(step % 4 + 4) % 4];
+  const status = rotationProgress < 1 ? '...' : '';
+  ctx.fillText(dir + status, CSS_W - 10, 66);
+  ctx.globalAlpha = 1;
+
+  requestAnimationFrame(render);
+}
+
+// ===== Mouse Interaction =====
+canvas.addEventListener('mousedown', (e) => {
+  if (e.ctrlKey || e.metaKey) return;
+  camera.isDragging = true;
+  camera.dragStartX = e.clientX; camera.dragStartY = e.clientY;
+  camera.camStartX = camera.targetX; camera.camStartY = camera.targetY;
+  canvas.style.cursor = 'grabbing';
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  if (camera.isDragging) {
+    const dx = (e.clientX - camera.dragStartX) / camera.zoom;
+    const dy = (e.clientY - camera.dragStartY) / camera.zoom;
+    camera.targetX = camera.camStartX - dx;
+    camera.targetY = camera.camStartY - dy;
+    // Clamp
+    camera.targetX = Math.max(100, Math.min(SCENE_W - 100, camera.targetX));
+    camera.targetY = Math.max(100, Math.min(SCENE_H - 100, camera.targetY));
+    tooltip.style.display = 'none';
+    return;
+  }
+
+  const rect = canvas.getBoundingClientRect();
+  const sx = (e.clientX - rect.left) * (CSS_W / rect.width);
+  const sy = (e.clientY - rect.top) * (CSS_H / rect.height);
+  const world = screenToWorld(sx, sy);
+
+  hoveredIdx = -1;
+  for (let i = 0; i < buildings.length; i++) {
+    const b = buildings[i];
+    const iso = toIso(b.gx, b.gy);
+    const dx = world.x - iso.x, dy = world.y - (iso.y - BLK * 2);
+    if (dx * dx + dy * dy < 784) {
+      hoveredIdx = i;
+      tooltip.style.display = 'block';
+      tooltip.style.left = e.clientX + 14 + 'px';
+      tooltip.style.top = e.clientY - 24 + 'px';
+      tooltip.textContent = `${b.name} \u2014 ${b.done ? 'Built!' : b.next ? '1 more session!' : 'Locked'}`;
+      canvas.style.cursor = 'pointer';
+      return;
+    }
+  }
+  tooltip.style.display = 'none';
+  canvas.style.cursor = 'grab';
+});
+
+canvas.addEventListener('mouseup', () => { camera.isDragging = false; canvas.style.cursor = 'grab'; });
+canvas.addEventListener('mouseleave', () => { camera.isDragging = false; hoveredIdx = -1; tooltip.style.display = 'none'; canvas.style.cursor = 'grab'; });
+
+canvas.addEventListener('click', (e) => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  e.preventDefault();
+  if (rotationProgress < 1) return;
+  startRotationAnim();
+});
+
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const factor = e.deltaY > 0 ? 0.9 : 1.1;
+  camera.targetZoom = Math.max(0.4, Math.min(2.0, camera.targetZoom * factor));
+}, { passive: false });
+
+requestAnimationFrame(render);
+</script>
+
+</body>
+</html>

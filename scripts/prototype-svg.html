@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Village Builder — SVG Isometric (Advanced)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+  }
+  .header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(26,26,46,0.95);
+    backdrop-filter: blur(8px);
+    padding: 10px 20px;
+    display: flex; align-items: center; gap: 10px;
+    color: white; font-size: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .header strong { font-size: 15px; }
+  .badge { background: rgba(255,255,255,0.1); padding: 3px 10px; border-radius: 10px; font-size: 12px; color: #8BC34A; cursor: pointer; }
+  .approach-label { margin-left: auto; opacity: 0.4; font-size: 12px; }
+  svg { margin-top: 46px; }
+  #tooltip {
+    display: none; position: fixed;
+    background: rgba(0,0,0,0.9); color: white;
+    padding: 6px 12px; border-radius: 6px;
+    font-size: 11px; z-index: 200; pointer-events: none;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .footer {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(26,26,46,0.95);
+    padding: 10px 20px;
+    display: flex; align-items: center; gap: 12px;
+    color: white; font-size: 13px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .prog-track { flex: 1; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; }
+  .prog-fill { height: 100%; width: 40%; background: #8BC34A; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <strong>My Village</strong>
+  <span class="badge">4 / 10 built</span>
+  <span class="approach-label">SVG Isometric (Advanced)</span>
+</div>
+
+<svg id="scene" width="800" height="620" viewBox="0 0 800 620" xmlns="http://www.w3.org/2000/svg"></svg>
+<div id="tooltip"></div>
+
+<div class="footer">
+  <span style="color:#8BC34A">4 / 10 built</span>
+  <div class="prog-track"><div class="prog-fill"></div></div>
+  <span>12 sessions</span>
+</div>
+
+<script>
+const svg = document.getElementById('scene');
+const NS = 'http://www.w3.org/2000/svg';
+const tooltip = document.getElementById('tooltip');
+
+const GRID = 12, TILE = 48, BLK = 10;
+const CSS_W = 800, CSS_H = 620;
+const OX = CSS_W / 2, OY = 50;
+
+// ===== Isometric Helpers =====
+function toIso(gx, gy) {
+  return { x: OX + (gx - gy) * (TILE / 2), y: OY + (gx + gy) * (TILE / 4) };
+}
+
+// Pre-compute iso positions
+const isoCache = [];
+for (let gy = 0; gy < GRID; gy++) {
+  isoCache[gy] = [];
+  for (let gx = 0; gx < GRID; gx++) {
+    isoCache[gy][gx] = toIso(gx, gy);
+  }
+}
+
+// ===== SVG Element Helpers =====
+function mkEl(tag, attrs, parent) {
+  const el = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  if (parent) parent.appendChild(el);
+  return el;
+}
+
+function isoBlockPoints(px, py, w, d, h) {
+  const hw = w / 2, hd = d / 4;
+  return {
+    left: `${px-hw},${py+hd-h} ${px},${py+hd*2-h} ${px},${py+hd*2} ${px-hw},${py+hd}`,
+    right: `${px+hw},${py+hd-h} ${px},${py+hd*2-h} ${px},${py+hd*2} ${px+hw},${py+hd}`,
+    top: `${px},${py-h} ${px+hw},${py+hd-h} ${px},${py+hd*2-h} ${px-hw},${py+hd-h}`,
+    edgeTop: `${px-hw},${py+hd-h} ${px},${py-h} ${px+hw},${py+hd-h}`,
+    edgeBot: `${px-hw},${py+hd} ${px},${py+hd*2} ${px+hw},${py+hd}`,
+  };
+}
+
+function createBlock(px, py, w, d, h, topC, leftC, rightC, parent) {
+  const pts = isoBlockPoints(px, py, w, d, h);
+  const g = mkEl('g', {}, parent);
+  mkEl('polygon', { points: pts.left, fill: leftC }, g);
+  mkEl('polygon', { points: pts.right, fill: rightC }, g);
+  mkEl('polygon', { points: pts.top, fill: topC }, g);
+  mkEl('polyline', { points: pts.edgeTop, fill: 'none', stroke: 'rgba(255,255,255,0.06)', 'stroke-width': '0.5' }, g);
+  mkEl('polyline', { points: pts.edgeBot, fill: 'none', stroke: 'rgba(0,0,0,0.12)', 'stroke-width': '0.5' }, g);
+  return g;
+}
+
+// ===== Terrain =====
+const heightMap = [];
+for (let gy = 0; gy < GRID; gy++) {
+  heightMap[gy] = [];
+  for (let gx = 0; gx < GRID; gx++) {
+    const nx = gx / GRID, ny = gy / GRID;
+    let h = Math.sin(nx * Math.PI * 2) * Math.cos(ny * Math.PI * 1.5) * 6;
+    h += Math.sin(nx * 3 + ny * 2) * 3;
+    heightMap[gy][gx] = Math.max(0, Math.round(h));
+  }
+}
+const flatZones = [[0,9],[1,9],[2,9],[3,9],[4,10],[5,10],[6,8],[7,8],[8,6],[9,6],[10,4],[10,5],
+  [1,7],[2,7],[3,7],[4,7],[5,7],[6,7],[7,7],[8,7],[9,7],[10,7],
+  [1,3],[2,3],[3,3],[4,3],[5,3],[6,3],[7,3],[8,3],[9,3],[10,3],
+  [3,1],[3,2],[3,4],[3,5],[3,6],[3,8],[3,9],
+  [8,1],[8,2],[8,4],[8,5],[8,6],[8,8],[8,9]];
+for (const [gx, gy] of flatZones) if (gx < GRID && gy < GRID) heightMap[gy][gx] = 0;
+
+// ===== Tile Types =====
+const tileTypes = {};
+const grassShades = [
+  { top: '#4a7c3f', left: '#3d6b2e', right: '#356026' },
+  { top: '#528a47', left: '#457a36', right: '#3d6b2e' },
+  { top: '#43723a', left: '#386228', right: '#305522' },
+];
+
+const pathTiles = [
+  [1,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[9,5],[10,5],
+  [5,1],[5,2],[5,3],[5,4],[5,6],[5,7],[5,8],[5,9],[5,10],
+  [1,2],[2,2],[3,2],[4,2],[6,2],[7,2],[8,2],[9,2],
+  [1,8],[2,8],[3,8],[4,8],[6,8],[7,8],[8,8],[9,8],
+  [2,1],[2,3],[2,4],[2,6],[2,7],[2,9],
+  [9,1],[9,3],[9,4],[9,6],[9,7],[9,9],
+];
+for (const [gx, gy] of pathTiles) if (gx < GRID && gy < GRID) tileTypes[`${gx},${gy}`] = 'path';
+
+const waterTiles = [[5,5],[6,5],[5,6],[6,6],[7,6]];
+for (const [gx, gy] of waterTiles) if (gx < GRID && gy < GRID) tileTypes[`${gx},${gy}`] = 'water';
+
+const sandTiles = [[4,5],[4,6],[5,4],[6,4],[7,4],[7,5],[8,5],[8,6],[5,7],[6,7],[7,7],[8,7]];
+for (const [gx, gy] of sandTiles) if (gx < GRID && gy < GRID) {
+  if (!tileTypes[`${gx},${gy}`]) tileTypes[`${gx},${gy}`] = 'sand';
+}
+
+const stoneTiles = [[1,1],[2,1],[1,2],[0,1],[0,2]];
+for (const [gx, gy] of stoneTiles) if (gx < GRID && gy < GRID) tileTypes[`${gx},${gy}`] = 'stone';
+
+const tileColors = {
+  path:  { top: '#8B7355', left: '#7A6548', right: '#6B573C' },
+  water: { top: '#2980B9', left: '#2471A3', right: '#1F618D' },
+  sand:  { top: '#D4B896', left: '#C4A882', right: '#B49872' },
+  stone: { top: '#7F8C8D', left: '#6B7778', right: '#5A6566' },
+};
+
+function getGroundColor(gx, gy) {
+  const key = `${gx},${gy}`;
+  if (tileTypes[key]) return tileColors[tileTypes[key]];
+  return grassShades[(gx * 3 + gy * 7) % 3];
+}
+
+// ===== Buildings =====
+const buildings = [
+  { gx: 1, gy: 10, name: 'Cottage', done: true, num: 1 },
+  { gx: 3, gy: 10, name: 'Farm', done: true, num: 2 },
+  { gx: 7, gy: 10, name: 'Well', done: true, num: 3 },
+  { gx: 10, gy: 8, name: 'Garden', done: true, num: 4 },
+  { gx: 10, gy: 3, name: 'Windmill', done: false, next: true, num: 5 },
+  { gx: 7, gy: 1, name: 'Market', done: false, num: 6 },
+  { gx: 1, gy: 1, name: 'Blacksmith', done: false, num: 7, forge: true },
+  { gx: 0, gy: 5, name: 'Tavern', done: false, num: 8 },
+  { gx: 0, gy: 9, name: 'Chapel', done: false, num: 9 },
+  { gx: 4, gy: 0, name: 'Watchtower', done: false, num: 10 },
+];
+
+// ===== Trees & Rocks =====
+const treesData = [
+  {gx:0,gy:0,h:2,type:'pine'},{gx:11,gy:0,h:3,type:'oak'},{gx:11,gy:4,h:2,type:'pine'},
+  {gx:11,gy:8,h:2,type:'oak'},{gx:11,gy:11,h:3,type:'pine'},{gx:0,gy:11,h:2,type:'oak'},
+  {gx:6,gy:11,h:3,type:'pine'},{gx:0,gy:7,h:2,type:'pine'},{gx:0,gy:3,h:2,type:'oak'},
+  {gx:8,gy:0,h:2,type:'pine'},{gx:3,gy:11,h:2,type:'oak'},{gx:9,gy:11,h:3,type:'pine'},
+  {gx:11,gy:2,h:2,type:'oak'},{gx:11,gy:6,h:2,type:'pine'},{gx:11,gy:10,h:2,type:'oak'},
+  {gx:6,gy:0,h:2,type:'pine'},{gx:2,gy:0,h:2,type:'oak'},
+];
+const rocks = [{gx:0,gy:2,h:1.2},{gx:1,gy:0,h:0.8},{gx:10,gy:0,h:1},{gx:10,gy:11,h:0.6},{gx:1,gy:11,h:0.9}];
+
+// ===== Pre-computed walkable neighbors =====
+const walkableList = pathTiles.filter(([gx, gy]) => gx < GRID && gy < GRID);
+const neighborCache = new Map();
+for (const [gx, gy] of walkableList) {
+  neighborCache.set(`${gx},${gy}`, walkableList.filter(([nx, ny]) =>
+    Math.abs(nx - gx) + Math.abs(ny - gy) <= 2 && (nx !== gx || ny !== gy)));
+}
+
+// ===== Building Draw Functions (SVG) =====
+function drawCottage(gx, gy, yOff, parent) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  createBlock(x, py, TILE, TILE, BLK * 2, '#D4A76A', '#C49558', '#B8894E', parent);
+  createBlock(x, py - BLK * 2, TILE, TILE, BLK * 1.5, '#E8D5B7', '#D4C4A4', '#C4B494', parent);
+  createBlock(x, py - BLK * 3.5, TILE + 4, TILE + 4, BLK * 1.2, '#922B21', '#7B241E', '#6B1F19', parent);
+  createBlock(x + 12, py - BLK * 4.7, 8, 8, BLK * 1.5, '#6B6B6B', '#555', '#4A4A4A', parent);
+  createBlock(x - 6, py, 8, 8, BLK * 1.4, '#5C3317', '#4A2810', '#3D2008', parent);
+  createBlock(x + 8, py - BLK * 1.2, 6, 6, 6, '#4A90D9', '#3B7BC4', '#2D66AF', parent);
+}
+
+function drawFarm(gx, gy, yOff, parent) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  createBlock(x, py, TILE, TILE, BLK * 2, '#C0392B', '#A93226', '#922B21', parent);
+  createBlock(x, py - BLK * 2, TILE + 2, TILE + 2, BLK * 1.5, '#7B241E', '#6B1F19', '#5B1A14', parent);
+  createBlock(x - 5, py, 12, 12, BLK * 1.5, '#5C3317', '#4A2810', '#3D2008', parent);
+  const { x: wx, y: wy } = toIso(gx + 1, gy);
+  createBlock(wx, wy + yOff, TILE, TILE, BLK * 0.4, '#DAA520', '#C89418', '#B88514', parent);
+  createBlock(wx, wy + yOff - BLK * 0.4, TILE - 8, TILE - 8, BLK * 0.3, '#CDBE70', '#BCA960', '#AB9850', parent);
+}
+
+function drawWell(gx, gy, yOff, parent) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  createBlock(x, py, TILE * 0.7, TILE * 0.7, BLK, '#7F8C8D', '#6B7778', '#5A6566', parent);
+  createBlock(x, py - BLK * 0.6, TILE * 0.45, TILE * 0.45, BLK * 0.3, '#2980B9', '#2471A3', '#1F618D', parent);
+  createBlock(x - 8, py - BLK, 4, 4, BLK * 2, '#6B4226', '#5A3820', '#4D301B', parent);
+  createBlock(x + 8, py - BLK, 4, 4, BLK * 2, '#6B4226', '#5A3820', '#4D301B', parent);
+  createBlock(x, py - BLK * 3, TILE * 0.6, TILE * 0.6, BLK * 0.4, '#922B21', '#7B241E', '#6B1F19', parent);
+}
+
+function drawGarden(gx, gy, yOff, parent) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  const colors = [['#FF69B4','#E55A9F','#CC4F8E'],['#FFD700','#E5C200','#CCAD00'],['#FF6347','#E55A3F','#CC5038'],['#9B59B6','#8E51A8','#7D479A']];
+  const offsets = [[-8,-4],[8,-4],[-8,4],[8,4]];
+  for (let i = 0; i < 4; i++) createBlock(x + offsets[i][0], py + offsets[i][1], 14, 14, BLK * 0.5, colors[i][0], colors[i][1], colors[i][2], parent);
+  createBlock(x - 18, py, 3, 3, BLK * 0.8, '#6B4226', '#5A3820', '#4D301B', parent);
+  createBlock(x + 18, py, 3, 3, BLK * 0.8, '#6B4226', '#5A3820', '#4D301B', parent);
+}
+
+function drawWindmillBody(gx, gy, yOff, parent) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  createBlock(x, py, TILE * 0.7, TILE * 0.7, BLK * 1.5, '#E8D5B7', '#D4C4A4', '#C4B494', parent);
+  createBlock(x, py - BLK * 1.5, TILE * 0.55, TILE * 0.55, BLK * 3, '#D4C4A4', '#C4B494', '#B4A484', parent);
+  createBlock(x, py - BLK * 4.5, TILE * 0.45, TILE * 0.45, BLK * 0.8, '#922B21', '#7B241E', '#6B1F19', parent);
+}
+
+function drawMarket(gx, gy, yOff, parent) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  createBlock(x, py, TILE, TILE, BLK * 1.5, '#D4A76A', '#C49558', '#B8894E', parent);
+  createBlock(x, py - BLK * 1.5, TILE, TILE, BLK, '#E8D5B7', '#D4C4A4', '#C4B494', parent);
+  createBlock(x, py - BLK * 2.5, TILE + 8, TILE + 8, BLK * 0.3, '#C0392B', '#A93226', '#922B21', parent);
+  createBlock(x - 8, py, TILE * 0.4, TILE * 0.4, BLK * 0.8, '#8B6914', '#7A5C10', '#6B500E', parent);
+  createBlock(x - 8, py - BLK * 0.8, 8, 8, 4, '#27AE60', '#229954', '#1E8449', parent);
+  createBlock(x - 2, py - BLK * 0.8, 6, 6, 4, '#E74C3C', '#D44338', '#C03A30', parent);
+}
+
+function drawBlacksmith(gx, gy, yOff, parent) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  createBlock(x, py, TILE, TILE, BLK * 2, '#6B6B6B', '#5A5A5A', '#4A4A4A', parent);
+  createBlock(x, py - BLK * 2, TILE, TILE, BLK * 1.2, '#7F8C8D', '#6B7778', '#5A6566', parent);
+  createBlock(x, py - BLK * 3.2, TILE + 2, TILE + 2, BLK * 0.8, '#3D2B1F', '#332418', '#2B1E14', parent);
+  createBlock(x + 14, py - BLK * 4, 10, 10, BLK * 2, '#4A4A4A', '#3D3D3D', '#333', parent);
+  createBlock(x - 14, py, 10, 10, BLK * 0.6, '#4A4A4A', '#3D3D3D', '#333', parent);
+}
+
+function drawTavern(gx, gy, yOff, parent) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  createBlock(x, py, TILE, TILE, BLK * 2.5, '#5C3317', '#4A2810', '#3D2008', parent);
+  createBlock(x, py - BLK * 2.5, TILE, TILE, BLK * 2, '#6B4226', '#5A3820', '#4D301B', parent);
+  createBlock(x, py - BLK * 4.5, TILE + 4, TILE + 4, BLK, '#3D2B1F', '#332418', '#2B1E14', parent);
+  createBlock(x - 6, py - BLK * 1.5, 7, 7, 6, '#FDB813', '#E8A810', '#D4980E', parent);
+  createBlock(x + 8, py - BLK * 1.5, 7, 7, 6, '#FDB813', '#E8A810', '#D4980E', parent);
+  createBlock(x, py, 10, 10, BLK * 1.8, '#3D2B1F', '#332418', '#2B1E14', parent);
+}
+
+function drawChapel(gx, gy, yOff, parent) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  createBlock(x, py, TILE, TILE, BLK * 2, '#E8E8E0', '#D4D4CC', '#C4C4BC', parent);
+  createBlock(x, py - BLK * 2, TILE * 0.9, TILE * 0.9, BLK * 2.5, '#F0F0E8', '#E0E0D8', '#D0D0C8', parent);
+  createBlock(x, py - BLK * 4.5, TILE * 0.4, TILE * 0.4, BLK * 3, '#D4D4CC', '#C4C4BC', '#B4B4AC', parent);
+  createBlock(x, py - BLK * 7.5, 4, 4, BLK * 0.8, '#DAA520', '#C89418', '#B88514', parent);
+  createBlock(x, py - BLK * 7, 10, 4, 3, '#DAA520', '#C89418', '#B88514', parent);
+  createBlock(x, py - BLK * 3, 8, 8, 8, '#4A90D9', '#3B7BC4', '#2D66AF', parent);
+  createBlock(x, py, 10, 10, BLK * 1.5, '#5C3317', '#4A2810', '#3D2008', parent);
+}
+
+function drawWatchtower(gx, gy, yOff, parent) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  createBlock(x, py, TILE * 0.7, TILE * 0.7, BLK * 2, '#7F8C8D', '#6B7778', '#5A6566', parent);
+  createBlock(x, py - BLK * 2, TILE * 0.6, TILE * 0.6, BLK * 2, '#6B6B6B', '#5A5A5A', '#4A4A4A', parent);
+  createBlock(x, py - BLK * 4, TILE * 0.55, TILE * 0.55, BLK * 2, '#7F8C8D', '#6B7778', '#5A6566', parent);
+  createBlock(x, py - BLK * 6, TILE * 0.5, TILE * 0.5, BLK * 2, '#6B6B6B', '#5A5A5A', '#4A4A4A', parent);
+  createBlock(x, py - BLK * 8, TILE * 0.65, TILE * 0.65, BLK * 0.5, '#7F8C8D', '#6B7778', '#5A6566', parent);
+  mkEl('line', { x1: x, y1: py - BLK * 8.5, x2: x, y2: py - BLK * 10.5, stroke: '#6B4226', 'stroke-width': '1.5' }, parent);
+  mkEl('polygon', { points: `${x},${py-BLK*10.5} ${x+10},${py-BLK*10} ${x},${py-BLK*9.5}`, fill: '#C0392B' }, parent);
+}
+
+function drawTree(gx, gy, h, type, yOff, parent) {
+  const { x, y } = toIso(gx, gy); const py = y + yOff;
+  const bh = BLK * h;
+  if (type === 'pine') {
+    createBlock(x, py, 6, 6, BLK * 1.5, '#6B4226', '#5A3820', '#4D301B', parent);
+    createBlock(x, py - BLK * 1.5, TILE * 0.6, TILE * 0.6, bh, '#2D5A27', '#256B20', '#1E5A1A', parent);
+    createBlock(x, py - BLK * 1.5 - bh, TILE * 0.45, TILE * 0.45, bh * 0.7, '#3A7D32', '#328A2A', '#2A7522', parent);
+    createBlock(x, py - BLK * 1.5 - bh * 1.7, TILE * 0.3, TILE * 0.3, bh * 0.5, '#4A9D42', '#42A83A', '#3A9332', parent);
+  } else {
+    createBlock(x, py, 6, 6, BLK * 1.2, '#6B4226', '#5A3820', '#4D301B', parent);
+    createBlock(x, py - BLK * 1.2, TILE * 0.55, TILE * 0.55, bh, '#3A7D32', '#328A2A', '#2A7522', parent);
+    createBlock(x + 4, py - BLK * 1.2 - bh, TILE * 0.45, TILE * 0.45, bh * 0.6, '#4A9D42', '#42A83A', '#3A9332', parent);
+    createBlock(x - 3, py - BLK * 1.2 - bh * 0.5, TILE * 0.35, TILE * 0.35, bh * 0.5, '#58B850', '#50A848', '#489840', parent);
+  }
+}
+
+function drawRock(gx, gy, h, yOff, parent) {
+  const { x, y } = toIso(gx, gy);
+  createBlock(x, y + yOff, TILE * 0.5, TILE * 0.5, BLK * h, '#7F8C8D', '#6B7778', '#5A6566', parent);
+  createBlock(x + 5, y + yOff - BLK * h * 0.3, TILE * 0.3, TILE * 0.3, BLK * h * 0.6, '#95A5A6', '#849494', '#738484', parent);
+}
+
+const buildingDrawFns = {
+  'Cottage': drawCottage, 'Farm': drawFarm, 'Well': drawWell,
+  'Garden': drawGarden, 'Windmill': drawWindmillBody, 'Market': drawMarket,
+  'Blacksmith': drawBlacksmith, 'Tavern': drawTavern,
+  'Chapel': drawChapel, 'Watchtower': drawWatchtower,
+};
+
+// ========================================
+// SVG LAYER SETUP
+// ========================================
+
+// Defs for clipping
+const defs = mkEl('defs', {}, svg);
+
+// Isometric diamond clip path for atmospheric effects
+const cTop = toIso(0, 0), cRight = toIso(GRID - 1, 0);
+const cBottom = toIso(GRID - 1, GRID - 1), cLeft = toIso(0, GRID - 1);
+
+const clipAtmo = mkEl('clipPath', { id: 'atmo-clip' }, defs);
+mkEl('polygon', {
+  points: `${cTop.x},${cTop.y - 90} ${cRight.x + 30},${cRight.y} ${cBottom.x},${cBottom.y + 20} ${cLeft.x - 30},${cLeft.y}`
+}, clipAtmo);
+
+// Static scene layer (ground + trees + rocks + buildings) - built ONCE
+const staticLayer = mkEl('g', { id: 'static-scene' }, svg);
+
+// Water shimmer layer (dynamic, update fill colors per frame)
+const waterLayer = mkEl('g', { id: 'water-layer' }, svg);
+
+// Windmill blades layer (dynamic rotation)
+const bladesLayer = mkEl('g', { id: 'blades-layer' }, svg);
+
+// Effects layer (glow, tavern warmth, shadows for hover)
+const effectsLayer = mkEl('g', { id: 'effects-layer' }, svg);
+
+// Creature layer
+const creatureLayer = mkEl('g', { id: 'creature-layer' }, svg);
+
+// Particle layer (smoke, sparkles, embers)
+const particleLayer = mkEl('g', { id: 'particle-layer' }, svg);
+
+// Atmospheric layer (clouds, weather, rainbow) - clipped to diamond
+const atmoLayer = mkEl('g', { id: 'atmo-layer', 'clip-path': 'url(#atmo-clip)' }, svg);
+
+// FPS text (topmost)
+const fpsText = mkEl('text', {
+  x: CSS_W - 10, y: 50, fill: '#0f0', opacity: '0.7',
+  'font-family': 'monospace', 'font-weight': 'bold', 'font-size': '12',
+  'text-anchor': 'end', 'dominant-baseline': 'hanging'
+}, svg);
+fpsText.textContent = 'FPS: 0';
+
+// ========================================
+// BUILD STATIC SCENE (ONCE)
+// ========================================
+function buildStaticScene() {
+  // Sort all objects by depth for correct rendering order
+  const allObjects = [];
+  for (let gy = 0; gy < GRID; gy++) {
+    for (let gx = 0; gx < GRID; gx++) {
+      allObjects.push({ kind: 'ground', gx, gy, depth: gy * GRID + gx });
+    }
+  }
+  for (const t of treesData) allObjects.push({ kind: 'tree', ...t, depth: t.gy * GRID + t.gx + 0.1 });
+  for (const r of rocks) allObjects.push({ kind: 'rock', ...r, depth: r.gy * GRID + r.gx + 0.1 });
+  for (let i = 0; i < buildings.length; i++) {
+    const b = buildings[i];
+    allObjects.push({ kind: 'building', idx: i, gx: b.gx, gy: b.gy, depth: b.gy * GRID + b.gx + 0.2 });
+  }
+  allObjects.sort((a, b) => a.depth - b.depth);
+
+  for (const obj of allObjects) {
+    const th = heightMap[obj.gy]?.[obj.gx] || 0;
+
+    if (obj.kind === 'ground') {
+      const gc = getGroundColor(obj.gx, obj.gy);
+      const key = `${obj.gx},${obj.gy}`;
+      const isWater = tileTypes[key] === 'water';
+      const depth = (obj.gx + obj.gy) / (GRID * 2);
+      const alpha = 1 - depth * 0.096;
+
+      const tileGroup = mkEl('g', { opacity: alpha }, staticLayer);
+
+      if (isWater) {
+        // Static water base - will be overlaid by dynamic shimmer
+        createBlock(isoCache[obj.gy][obj.gx].x, isoCache[obj.gy][obj.gx].y,
+          TILE, TILE, BLK * 0.4 + th * BLK, '#2980B9', '#2471A3', '#1F618D', tileGroup);
+      } else {
+        if (th > 0) {
+          createBlock(isoCache[obj.gy][obj.gx].x, isoCache[obj.gy][obj.gx].y,
+            TILE, TILE, th * BLK, '#6B4226', '#5A3820', '#4D301B', tileGroup);
+        }
+        createBlock(isoCache[obj.gy][obj.gx].x, isoCache[obj.gy][obj.gx].y,
+          TILE, TILE, BLK * 0.6 + th * BLK, gc.top, gc.left, gc.right, tileGroup);
+      }
+
+      // Flower patches
+      if (!isWater && !tileTypes[key]) {
+        const seed = obj.gx * 17 + obj.gy * 31;
+        if (seed % 5 === 0) {
+          const iso = isoCache[obj.gy][obj.gx];
+          const fColors = ['#FF69B4', '#FFD700', '#FF6347', '#9B59B6', '#3498DB'];
+          for (let i = 0; i < 3; i++) {
+            mkEl('circle', {
+              cx: iso.x + Math.sin(seed + i * 2) * 10,
+              cy: iso.y + Math.cos(seed + i * 3) * 5 - 4,
+              r: 1.5, fill: fColors[(seed + i) % 5], opacity: 0.7 * alpha
+            }, tileGroup);
+          }
+        }
+      }
+
+    } else if (obj.kind === 'tree') {
+      drawTree(obj.gx, obj.gy, obj.h, obj.type, -th * BLK, staticLayer);
+
+    } else if (obj.kind === 'rock') {
+      drawRock(obj.gx, obj.gy, obj.h, -th * BLK, staticLayer);
+
+    } else if (obj.kind === 'building') {
+      const b = buildings[obj.idx];
+      const bGroup = mkEl('g', {}, staticLayer);
+      if (!b.done && !b.next) bGroup.setAttribute('opacity', '0.35');
+      else if (b.next) bGroup.setAttribute('opacity', '0.6');
+
+      const drawFn = buildingDrawFns[b.name];
+      if (drawFn) drawFn(b.gx, b.gy, -(th * BLK), bGroup);
+
+      // Cast shadow for completed buildings
+      if (b.done) {
+        const iso = toIso(b.gx, b.gy);
+        mkEl('ellipse', {
+          cx: iso.x + 10, cy: iso.y + TILE / 4 + 4,
+          rx: TILE / 2.5, ry: TILE / 6, fill: '#000', opacity: '0.08'
+        }, staticLayer);
+      }
+
+      // Number badge
+      const iso = toIso(b.gx, b.gy);
+      const badgeAlpha = b.done ? 0.85 : 0.4;
+      mkEl('circle', {
+        cx: iso.x + 20, cy: iso.y - BLK * 2, r: 8,
+        fill: b.done ? '#2d2d2d' : '#555', opacity: badgeAlpha
+      }, staticLayer);
+      const numText = mkEl('text', {
+        x: iso.x + 20, y: iso.y - BLK * 2 + 0.5,
+        fill: 'white', 'font-size': '8', 'font-weight': 'bold',
+        'text-anchor': 'middle', 'dominant-baseline': 'middle',
+        opacity: badgeAlpha
+      }, staticLayer);
+      numText.textContent = b.num;
+    }
+  }
+}
+
+buildStaticScene();
+
+// ========================================
+// WATER SHIMMER (pre-create SVG elements, update fills per frame)
+// ========================================
+const waterElements = [];
+for (const [gx, gy] of waterTiles) {
+  if (gx >= GRID || gy >= GRID) continue;
+  const th = heightMap[gy][gx];
+  const iso = isoCache[gy][gx];
+  const depth = (gx + gy) / (GRID * 2);
+  const alpha = (1 - depth * 0.096) * 0.6;
+  const pts = isoBlockPoints(iso.x, iso.y, TILE, TILE, BLK * 0.4 + th * BLK);
+  const g = mkEl('g', { opacity: alpha }, waterLayer);
+  const leftPoly = mkEl('polygon', { points: pts.left, fill: '#2471A3' }, g);
+  const rightPoly = mkEl('polygon', { points: pts.right, fill: '#1F618D' }, g);
+  const topPoly = mkEl('polygon', { points: pts.top, fill: '#2980B9' }, g);
+  waterElements.push({ gx, gy, leftPoly, rightPoly, topPoly });
+}
+
+// ========================================
+// WINDMILL BLADES (pre-create, update rotation per frame)
+// ========================================
+const windmillBuilding = buildings.find(b => b.name === 'Windmill');
+let bladesGroup = null;
+if (windmillBuilding) {
+  const th = heightMap[windmillBuilding.gy]?.[windmillBuilding.gx] || 0;
+  const { x, y } = toIso(windmillBuilding.gx, windmillBuilding.gy);
+  const py = y - th * BLK;
+  const cx = x, cy = py - BLK * 4;
+
+  const outerG = mkEl('g', {
+    opacity: windmillBuilding.next ? '0.6' : (windmillBuilding.done ? '1' : '0.35')
+  }, bladesLayer);
+
+  bladesGroup = mkEl('g', {}, outerG);
+  // Store center for transform updates
+  bladesGroup._cx = cx;
+  bladesGroup._cy = cy;
+
+  for (let i = 0; i < 4; i++) {
+    const angle = i * 90;
+    const rad = angle * Math.PI / 180;
+    const ex = Math.cos(rad) * 22, ey = Math.sin(rad) * 22;
+    mkEl('line', { x1: 0, y1: 0, x2: ex, y2: ey, stroke: '#6B4226', 'stroke-width': '2.5' }, bladesGroup);
+    mkEl('rect', {
+      x: Math.cos(rad) * 12 - 4, y: Math.sin(rad) * 12 - 5,
+      width: 8, height: 10, fill: 'rgba(210,190,160,0.7)',
+      transform: `rotate(${angle},${Math.cos(rad)*12},${Math.sin(rad)*12})`
+    }, bladesGroup);
+  }
+}
+
+// ========================================
+// GLOW / EFFECTS (pre-create elements, update per frame)
+// ========================================
+// Next-to-unlock glow circle
+let glowCircle = null;
+if (windmillBuilding && windmillBuilding.next) {
+  const iso = toIso(windmillBuilding.gx, windmillBuilding.gy);
+  glowCircle = mkEl('circle', {
+    cx: iso.x, cy: iso.y - BLK * 2, r: 22,
+    fill: 'rgba(232,184,48,0.25)'
+  }, effectsLayer);
+  glowCircle._cx = iso.x;
+  glowCircle._cy = iso.y - BLK * 2;
+}
+
+// Tavern warmth glow
+const tavern = buildings[7];
+let tavernGlow = null;
+if (!tavern.done) {
+  const iso = toIso(tavern.gx, tavern.gy);
+  tavernGlow = mkEl('circle', {
+    cx: iso.x, cy: iso.y - BLK * 2, r: 15,
+    fill: '#FDB813', opacity: '0.05'
+  }, effectsLayer);
+}
+
+// ========================================
+// CREATURES (pre-create SVG elements, update positions per frame)
+// ========================================
+function darken(hex, amount) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgb(${r * (1 - amount) | 0},${g * (1 - amount) | 0},${b * (1 - amount) | 0})`;
+}
+
+const creatures = [];
+
+function initCreatures() {
+  const villagerColors = [
+    { body: '#E74C3C', head: '#FDEBD0' },
+    { body: '#3498DB', head: '#FDEBD0' },
+    { body: '#27AE60', head: '#F5CBA7' },
+    { body: '#8E44AD', head: '#FDEBD0' },
+    { body: '#F39C12', head: '#F5CBA7' },
+  ];
+
+  // 5 villagers
+  for (let i = 0; i < 5; i++) {
+    const t = walkableList[Math.floor(Math.random() * walkableList.length)];
+    const iso = toIso(t[0], t[1]);
+    const g = mkEl('g', {}, creatureLayer);
+    // Body block (simplified as polygon group)
+    const bodyG = mkEl('g', {}, g);
+    const headG = mkEl('g', {}, g);
+
+    const vc = villagerColors[i];
+    // Pre-build body iso block polygons
+    const bPts = isoBlockPoints(0, 0, 6, 6, 7);
+    mkEl('polygon', { points: bPts.left, fill: darken(vc.body, 0.15) }, bodyG);
+    mkEl('polygon', { points: bPts.right, fill: darken(vc.body, 0.25) }, bodyG);
+    mkEl('polygon', { points: bPts.top, fill: vc.body }, bodyG);
+
+    const hPts = isoBlockPoints(0, -7, 5, 5, 4);
+    mkEl('polygon', { points: hPts.left, fill: darken(vc.head, 0.1) }, headG);
+    mkEl('polygon', { points: hPts.right, fill: darken(vc.head, 0.2) }, headG);
+    mkEl('polygon', { points: hPts.top, fill: vc.head }, headG);
+
+    creatures.push({
+      type: 0, x: iso.x, y: iso.y - 6, tx: iso.x, ty: iso.y - 6,
+      gx: t[0], gy: t[1], speed: 0.3 + Math.random() * 0.2,
+      walkTimer: 0, waitTime: Math.random() * 3,
+      el: g
+    });
+  }
+
+  // 3 chickens
+  const fIso = toIso(4, 10);
+  for (let i = 0; i < 3; i++) {
+    const g = mkEl('g', {}, creatureLayer);
+    // Body ellipse
+    mkEl('ellipse', { cx: 0, cy: -2, rx: 3, ry: 2.5, fill: '#fff' }, g);
+    // Head
+    mkEl('circle', { cx: 2, cy: -4, r: 1.8, fill: '#fff' }, g);
+    // Beak
+    mkEl('circle', { cx: 4, cy: -3.5, r: 0.8, fill: '#F39C12' }, g);
+    // Comb
+    mkEl('circle', { cx: 2, cy: -5.5, r: 1, fill: '#E74C3C' }, g);
+
+    creatures.push({
+      type: 1,
+      x: fIso.x + (Math.random() - 0.5) * 30,
+      y: fIso.y - 4 + (Math.random() - 0.5) * 15,
+      vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.15,
+      homeX: fIso.x, homeY: fIso.y - 4,
+      peckTimer: Math.random() * 2, pecking: false,
+      el: g
+    });
+  }
+
+  // Cat
+  const catIso = toIso(2, 8);
+  const catG = mkEl('g', {}, creatureLayer);
+  mkEl('ellipse', { cx: 0, cy: 0, rx: 4, ry: 2.5, fill: '#F39C12' }, catG);
+  mkEl('circle', { cx: 3, cy: -2, r: 2, fill: '#F39C12' }, catG);
+  // Ears
+  mkEl('polygon', { points: '2,-3.5 1.5,-5.5 3.5,-3.5', fill: '#E67E22' }, catG);
+  mkEl('polygon', { points: '3.5,-3.5 4.5,-5.5 5,-3', fill: '#E67E22' }, catG);
+  // Tail (path element for dynamic update)
+  const catTail = mkEl('path', { d: 'M-3.5,0 Q-6,-4 -4,-5', fill: 'none', stroke: '#F39C12', 'stroke-width': '1.2' }, catG);
+
+  creatures.push({
+    type: 2, x: catIso.x, y: catIso.y - 5, tx: catIso.x, ty: catIso.y - 5,
+    gx: 2, gy: 8, speed: 0.2, sitTimer: 0, sitting: false, tailWag: 0,
+    el: catG, tailEl: catTail
+  });
+
+  // Dog
+  const dogIso = toIso(2, 10);
+  const dogG = mkEl('g', {}, creatureLayer);
+  mkEl('ellipse', { cx: 0, cy: 0, rx: 5, ry: 3, fill: '#8B6914' }, dogG);
+  mkEl('circle', { cx: 4, cy: -2, r: 2.5, fill: '#8B6914' }, dogG);
+  mkEl('ellipse', { cx: 5.5, cy: -1, rx: 1.5, ry: 2.5, fill: '#6B4226', transform: 'rotate(17,5.5,-1)' }, dogG);
+  // Tail (path for dynamic update)
+  const dogTail = mkEl('path', { d: 'M-4.5,-1 Q-7,-4 -6,-6', fill: 'none', stroke: '#8B6914', 'stroke-width': '1.5' }, dogG);
+
+  creatures.push({
+    type: 3, x: dogIso.x, y: dogIso.y - 5, tx: dogIso.x, ty: dogIso.y - 5,
+    gx: 2, gy: 10, speed: 0.35, waitTime: 0,
+    el: dogG, tailEl: dogTail
+  });
+}
+
+initCreatures();
+
+// ========================================
+// PARTICLES (smoke, sparkles, embers)
+// ========================================
+const particles = [];
+
+function spawnParticle(type, cx, cy, props) {
+  let el;
+  if (type === 'smoke') {
+    el = mkEl('circle', { cx: 0, cy: 0, r: props.size || 2, fill: '#bbb', opacity: '0.4' }, particleLayer);
+  } else if (type === 'sparkle') {
+    el = mkEl('circle', { cx: 0, cy: 0, r: props.size || 1.5, fill: '#E8B830', opacity: '0.9' }, particleLayer);
+  } else {
+    el = mkEl('circle', { cx: 0, cy: 0, r: props.size || 1.5, fill: props.fill || 'rgb(255,120,0)', opacity: '0.8' }, particleLayer);
+  }
+  el.setAttribute('transform', `translate(${cx},${cy})`);
+  particles.push({ type, x: cx, y: cy, life: 1, el, ...props });
+}
+
+function updateParticles(dt) {
+  const s = dt * 60;
+  let i = particles.length;
+  while (i--) {
+    const p = particles[i];
+    p.life -= (p.decay || 0.01) * s;
+    if (p.life <= 0) {
+      p.el.remove();
+      particles[i] = particles[particles.length - 1];
+      particles.pop();
+      continue;
+    }
+    if (p.vx) p.x += p.vx * s;
+    if (p.vy) p.y += p.vy * s;
+
+    if (p.type === 'smoke') {
+      p.el.setAttribute('r', (p.size || 2) * (1 + (1 - p.life) * 1.2));
+      p.el.setAttribute('opacity', p.life * 0.4);
+      p.el.setAttribute('transform', `translate(${p.x},${p.y})`);
+    } else if (p.type === 'sparkle') {
+      const sy = p.y - (1 - p.life) * 18;
+      p.el.setAttribute('r', (p.size || 1.5) * p.life);
+      p.el.setAttribute('opacity', p.life * 0.9);
+      p.el.setAttribute('transform', `translate(${p.x},${sy})`);
+    } else {
+      p.el.setAttribute('r', (p.size || 1.5) * p.life);
+      p.el.setAttribute('opacity', p.life * 0.8);
+      const r = 255, g = 69 + p.life * 120 | 0;
+      p.el.setAttribute('fill', `rgb(${r},${g},0)`);
+      p.el.setAttribute('transform', `translate(${p.x},${p.y})`);
+    }
+  }
+}
+
+function spawnSmoke(gx, gy, h) {
+  const iso = toIso(gx, gy);
+  if (particles.length < 80) spawnParticle('smoke', iso.x + 12, iso.y - h - BLK * 4.7, {
+    vx: 0.12 + Math.random() * 0.08, vy: -0.35 - Math.random() * 0.25,
+    decay: 0.005 + Math.random() * 0.003, size: 2 + Math.random() * 2.5
+  });
+}
+
+function spawnSparkle(gx, gy, h) {
+  const iso = toIso(gx, gy);
+  if (particles.length < 80) spawnParticle('sparkle',
+    iso.x + (Math.random() - 0.5) * 25, iso.y - h / 2 + (Math.random() - 0.5) * 20, {
+    decay: 0.012 + Math.random() * 0.008, size: 1 + Math.random() * 2
+  });
+}
+
+function spawnEmber(gx, gy) {
+  const iso = toIso(gx, gy);
+  if (particles.length < 80) spawnParticle('ember',
+    iso.x + 14 + (Math.random() - 0.5) * 8, iso.y - BLK * 4, {
+    vx: (Math.random() - 0.5) * 0.3, vy: -0.6 - Math.random() * 0.4,
+    decay: 0.015 + Math.random() * 0.01, size: 1.5 + Math.random() * 1.5,
+    fill: `rgb(255,${69 + Math.floor(Math.random() * 120)},0)`
+  });
+}
+
+// ========================================
+// WEATHER SYSTEM
+// ========================================
+let weatherMode = 'snow';
+const weatherParticles = [];
+const MAX_WEATHER = 50;
+
+const isoDiamondLeft = toIso(0, GRID - 1).x - 10;
+const isoDiamondRight = toIso(GRID - 1, 0).x + 10;
+const isoDiamondTop = toIso(0, 0).y - 60;
+
+// Pre-create weather particle pool
+const weatherPool = [];
+for (let i = 0; i < MAX_WEATHER; i++) {
+  const el = mkEl('circle', { r: 2, fill: '#fff', opacity: '0' }, atmoLayer);
+  el.style.display = 'none';
+  weatherPool.push(el);
+}
+// Rain lines need a separate pool
+const rainPool = [];
+for (let i = 0; i < MAX_WEATHER; i++) {
+  const el = mkEl('line', { stroke: '#7EB8DA', 'stroke-width': '1', opacity: '0' }, atmoLayer);
+  el.style.display = 'none';
+  rainPool.push(el);
+}
+
+function updateWeather(dt) {
+  const s = dt * 60;
+  if (weatherParticles.length < MAX_WEATHER && weatherMode !== 'clear') {
+    const spawnX = isoDiamondLeft + Math.random() * (isoDiamondRight - isoDiamondLeft);
+    if (weatherMode === 'snow') {
+      const el = weatherPool[weatherParticles.length];
+      if (el) {
+        el.style.display = '';
+        el.setAttribute('r', 1.5 + Math.random() * 2.5);
+        el.setAttribute('fill', '#fff');
+        weatherParticles.push({
+          x: spawnX, y: isoDiamondTop, vx: Math.random() * 0.3 - 0.1,
+          vy: 0.5 + Math.random() * 0.5, size: 1.5 + Math.random() * 2.5,
+          wobble: Math.random() * Math.PI * 2, wobbleSpeed: 0.02 + Math.random() * 0.02,
+          el, mode: 'snow'
+        });
+      }
+    } else {
+      const el = rainPool[weatherParticles.length];
+      if (el) {
+        el.style.display = '';
+        const len = 6 + Math.random() * 8;
+        weatherParticles.push({
+          x: spawnX, y: isoDiamondTop, vx: -0.5,
+          vy: 4 + Math.random() * 3, length: len,
+          el, mode: 'rain'
+        });
+      }
+    }
+  }
+
+  let i = weatherParticles.length;
+  while (i--) {
+    const p = weatherParticles[i];
+    p.x += (p.vx || 0) * s;
+    p.y += p.vy * s;
+    if (p.y > CSS_H + 10 || p.x < -10 || p.x > CSS_W + 10) {
+      p.el.style.display = 'none';
+      p.el.setAttribute('opacity', '0');
+      weatherParticles.splice(i, 1);
+      continue;
+    }
+    if (p.mode === 'snow') {
+      p.wobble += p.wobbleSpeed * s;
+      p.x += Math.sin(p.wobble) * 0.3 * s;
+      p.el.setAttribute('cx', p.x);
+      p.el.setAttribute('cy', p.y);
+      p.el.setAttribute('opacity', '0.7');
+    } else {
+      p.el.setAttribute('x1', p.x);
+      p.el.setAttribute('y1', p.y);
+      p.el.setAttribute('x2', p.x - 1);
+      p.el.setAttribute('y2', p.y + p.length);
+      p.el.setAttribute('opacity', '0.3');
+    }
+  }
+}
+
+function clearWeatherParticles() {
+  for (const p of weatherParticles) {
+    p.el.style.display = 'none';
+    p.el.setAttribute('opacity', '0');
+  }
+  weatherParticles.length = 0;
+}
+
+// ========================================
+// CLOUDS
+// ========================================
+const cloudMinX = toIso(0, GRID - 1).x;
+const cloudMaxX = toIso(GRID - 1, 0).x;
+const cloudAreaY = toIso(0, 0).y;
+
+const clouds = [];
+for (let i = 0; i < 4; i++) {
+  const g = mkEl('g', {}, atmoLayer);
+  const w = 40 + Math.random() * 30;
+  const h = 12 + Math.random() * 8;
+  const op = 0.15 + Math.random() * 0.1;
+  g.setAttribute('opacity', op);
+  mkEl('ellipse', { cx: 0, cy: 0, rx: w * 0.4, ry: h * 0.5, fill: '#fff' }, g);
+  mkEl('ellipse', { cx: w * 0.25, cy: -h * 0.15, rx: w * 0.35, ry: h * 0.45, fill: '#fff' }, g);
+  mkEl('ellipse', { cx: -w * 0.2, cy: h * 0.05, rx: w * 0.3, ry: h * 0.4, fill: '#fff' }, g);
+
+  clouds.push({
+    x: cloudMinX + Math.random() * (cloudMaxX - cloudMinX),
+    y: cloudAreaY - 30 + Math.random() * 35,
+    speed: 0.15 + Math.random() * 0.1, width: w,
+    el: g
+  });
+}
+
+// ========================================
+// RAINBOW (pre-create arcs in atmo layer)
+// ========================================
+const rainbowGroup = mkEl('g', { opacity: '0' }, atmoLayer);
+const rcx = cBottom.x + 80, rcy = (cTop.y + cBottom.y) / 2;
+const rainbowCols = ['rgba(255,0,0,0.06)','rgba(255,127,0,0.06)','rgba(255,255,0,0.06)',
+  'rgba(0,255,0,0.06)','rgba(0,0,255,0.06)','rgba(75,0,130,0.06)','rgba(148,0,211,0.06)'];
+for (let i = 0; i < 7; i++) {
+  const r = 120 - i * 4;
+  // SVG arc from ~1.15*PI to ~1.85*PI
+  const startAngle = Math.PI * 1.15;
+  const endAngle = Math.PI * 1.85;
+  const x1 = rcx + Math.cos(startAngle) * r;
+  const y1 = rcy + Math.sin(startAngle) * r;
+  const x2 = rcx + Math.cos(endAngle) * r;
+  const y2 = rcy + Math.sin(endAngle) * r;
+  mkEl('path', {
+    d: `M${x1},${y1} A${r},${r} 0 0 1 ${x2},${y2}`,
+    fill: 'none', stroke: rainbowCols[i], 'stroke-width': '5'
+  }, rainbowGroup);
+}
+
+// ========================================
+// WEATHER TOGGLE
+// ========================================
+const badge = document.querySelector('.badge');
+badge.addEventListener('click', () => {
+  const modes = ['snow', 'rain', 'clear'];
+  weatherMode = modes[(modes.indexOf(weatherMode) + 1) % modes.length];
+  clearWeatherParticles();
+  badge.textContent = weatherMode === 'snow' ? '\u2744\uFE0F Snow' : weatherMode === 'rain' ? '\uD83C\uDF27\uFE0F Rain' : '\u2600\uFE0F Clear';
+});
+badge.textContent = '\u2744\uFE0F Snow';
+
+// ========================================
+// ANIMATION STATE
+// ========================================
+let time = 0, lastFrame = 0, hoveredIdx = -1;
+let fpsFrames = 0, fpsLast = 0, fpsDisplay = 0;
+
+// ========================================
+// HOVER OVERLAY (pre-create, toggle visibility)
+// ========================================
+const hoverOverlay = mkEl('g', { id: 'hover-overlay', opacity: '0' }, effectsLayer);
+
+// ========================================
+// MAIN RENDER LOOP
+// ========================================
+function render(now) {
+  time = now * 0.001;
+  const dt = Math.min(0.05, (now - (lastFrame || now)) / 1000);
+  lastFrame = now;
+
+  // FPS counter
+  fpsFrames++;
+  if (now - fpsLast >= 1000) {
+    fpsDisplay = fpsFrames;
+    fpsFrames = 0;
+    fpsLast = now;
+    fpsText.textContent = 'FPS: ' + fpsDisplay;
+    fpsText.setAttribute('fill', fpsDisplay >= 30 ? '#0f0' : fpsDisplay >= 15 ? '#ff0' : '#f00');
+  }
+
+  const s = dt * 60;
+
+  // === Water shimmer (update fill colors on existing polygons) ===
+  for (const w of waterElements) {
+    const sh = Math.sin(time * 2 + w.gx * 0.7 + w.gy * 0.5) * 0.12;
+    w.topPoly.setAttribute('fill', `hsl(204,${60 + sh * 20}%,${46 + sh * 10}%)`);
+    w.leftPoly.setAttribute('fill', `hsl(204,${55 + sh * 15}%,${38 + sh * 8}%)`);
+    w.rightPoly.setAttribute('fill', `hsl(204,${50 + sh * 10}%,${32 + sh * 6}%)`);
+  }
+
+  // === Windmill blade rotation (update transform) ===
+  if (bladesGroup) {
+    const deg = (time * 1.5 * 180 / Math.PI) % 360;
+    bladesGroup.setAttribute('transform',
+      `translate(${bladesGroup._cx},${bladesGroup._cy}) rotate(${deg})`);
+  }
+
+  // === Next-to-unlock glow pulse ===
+  if (glowCircle) {
+    const glowR = 22 + Math.sin(time * 3) * 6;
+    glowCircle.setAttribute('r', glowR);
+    if (Math.random() < 0.04) spawnSparkle(windmillBuilding.gx, windmillBuilding.gy, BLK * 4);
+  }
+
+  // === Tavern warmth pulse ===
+  if (tavernGlow) {
+    tavernGlow.setAttribute('opacity', 0.05 + Math.sin(time * 2) * 0.03);
+  }
+
+  // === Cottage smoke ===
+  const cottage = buildings[0];
+  if (cottage.done && Math.random() < 0.03) {
+    spawnSmoke(cottage.gx, cottage.gy, heightMap[cottage.gy][cottage.gx] * BLK);
+  }
+
+  // === Forge embers ===
+  const blacksmith = buildings[6];
+  if (Math.random() < 0.03) spawnEmber(blacksmith.gx, blacksmith.gy);
+
+  // === Update particles ===
+  updateParticles(dt);
+
+  // === Update creatures ===
+  updateCreatures(dt, time, s);
+
+  // === Clouds (update positions) ===
+  for (const cl of clouds) {
+    cl.x += cl.speed * s;
+    if (cl.x > cloudMaxX + cl.width) cl.x = cloudMinX - cl.width;
+    cl.el.setAttribute('transform', `translate(${cl.x},${cl.y})`);
+  }
+
+  // === Rainbow visibility ===
+  rainbowGroup.setAttribute('opacity',
+    (weatherMode === 'clear' || weatherMode === 'rain') ? '1' : '0');
+
+  // === Weather ===
+  updateWeather(dt);
+
+  requestAnimationFrame(render);
+}
+
+// ========================================
+// CREATURE UPDATE
+// ========================================
+function updateCreatures(dt, time, s) {
+  for (const c of creatures) {
+    if (c.type === 0) { // Villager
+      c.waitTime -= dt;
+      if (c.waitTime <= 0) {
+        const dx = c.tx - c.x, dy = c.ty - c.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 1) {
+          const nb = neighborCache.get(`${c.gx},${c.gy}`);
+          if (nb && nb.length) {
+            const next = nb[Math.floor(Math.random() * nb.length)];
+            const ni = toIso(next[0], next[1]);
+            c.tx = ni.x; c.ty = ni.y - 6;
+            c.gx = next[0]; c.gy = next[1];
+            c.waitTime = Math.random() * 1.5;
+          }
+        } else {
+          c.x += (dx / dist) * c.speed * s;
+          c.y += (dy / dist) * c.speed * s;
+        }
+      }
+      c.walkTimer += 0.08 * s;
+      const bobY = Math.sin(c.walkTimer * 4) * 0.8;
+      c.el.setAttribute('transform', `translate(${c.x},${c.y + bobY})`);
+
+    } else if (c.type === 1) { // Chicken
+      c.peckTimer -= dt;
+      if (c.peckTimer <= 0) {
+        c.pecking = !c.pecking;
+        c.peckTimer = c.pecking ? 0.3 + Math.random() * 0.5 : 1 + Math.random() * 2;
+        if (!c.pecking) { c.vx = (Math.random() - 0.5) * 0.4; c.vy = (Math.random() - 0.5) * 0.2; }
+      }
+      if (!c.pecking) {
+        c.x += c.vx * s; c.y += c.vy * s;
+        const dhx = c.homeX - c.x, dhy = c.homeY - c.y;
+        if (dhx * dhx + dhy * dhy > 900) { c.vx += dhx * 0.005; c.vy += dhy * 0.005; }
+      }
+      const po = c.pecking ? 2 : 0;
+      c.el.setAttribute('transform', `translate(${c.x},${c.y + po})`);
+
+    } else if (c.type === 2) { // Cat
+      c.sitTimer -= dt;
+      c.tailWag += 0.05 * s;
+      if (c.sitTimer <= 0) {
+        c.sitting = !c.sitting;
+        c.sitTimer = c.sitting ? 3 + Math.random() * 4 : 2 + Math.random() * 3;
+        if (!c.sitting) {
+          const nx = Math.max(0, Math.min(GRID - 1, c.gx + Math.floor(Math.random() * 3) - 1));
+          const ny = Math.max(0, Math.min(GRID - 1, c.gy + Math.floor(Math.random() * 3) - 1));
+          const ni = toIso(nx, ny); c.tx = ni.x; c.ty = ni.y - 5; c.gx = nx; c.gy = ny;
+        }
+      }
+      if (!c.sitting) {
+        const dx = c.tx - c.x, dy = c.ty - c.y, dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 1) { c.x += (dx / dist) * c.speed * s; c.y += (dy / dist) * c.speed * s; }
+      }
+      c.el.setAttribute('transform', `translate(${c.x},${c.y})`);
+      // Update tail wag
+      const tw = Math.sin(c.tailWag) * 2;
+      c.tailEl.setAttribute('d', `M-3.5,0 Q${-6 + tw},-4 ${-4 + tw},-5`);
+
+    } else if (c.type === 3) { // Dog
+      c.waitTime -= dt;
+      if (c.waitTime <= 0) {
+        const dx = c.tx - c.x, dy = c.ty - c.y, dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 1) {
+          const nx = Math.max(0, Math.min(GRID - 1, c.gx + Math.floor(Math.random() * 3) - 1));
+          const ny = Math.max(0, Math.min(GRID - 1, c.gy + Math.floor(Math.random() * 3) - 1));
+          const ni = toIso(nx, ny); c.tx = ni.x; c.ty = ni.y - 5; c.gx = nx; c.gy = ny;
+          c.waitTime = Math.random() * 2;
+        } else { c.x += (dx / dist) * c.speed * s; c.y += (dy / dist) * c.speed * s; }
+      }
+      c.el.setAttribute('transform', `translate(${c.x},${c.y})`);
+      // Update tail wag
+      const wag = Math.sin(time * 6) * 3;
+      c.tailEl.setAttribute('d', `M-4.5,-1 Q-7,${-4 + wag} -6,${-6 + wag}`);
+    }
+  }
+}
+
+// ========================================
+// HIT TESTING / TOOLTIP
+// ========================================
+svg.addEventListener('mousemove', (e) => {
+  const rect = svg.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (CSS_W / rect.width);
+  const my = (e.clientY - rect.top) * (CSS_H / rect.height);
+  hoveredIdx = -1;
+  for (let i = 0; i < buildings.length; i++) {
+    const b = buildings[i];
+    const iso = toIso(b.gx, b.gy);
+    const dx = mx - iso.x, dy = my - (iso.y - BLK * 2);
+    if (dx * dx + dy * dy < 784) {
+      hoveredIdx = i;
+      tooltip.style.display = 'block';
+      tooltip.style.left = e.clientX + 14 + 'px';
+      tooltip.style.top = e.clientY - 24 + 'px';
+      tooltip.textContent = `${b.name} \u2014 ${b.done ? 'Built!' : b.next ? '1 more session!' : 'Locked'}`;
+      svg.style.cursor = 'pointer';
+      return;
+    }
+  }
+  tooltip.style.display = 'none';
+  svg.style.cursor = 'default';
+});
+
+svg.addEventListener('mouseleave', () => { hoveredIdx = -1; tooltip.style.display = 'none'; });
+
+requestAnimationFrame(render);
+</script>
+
+</body>
+</html>
