@@ -1,57 +1,118 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
-import { useState } from "react";
-import { Ground } from "./ground";
+import { useState, createContext, useContext } from "react";
+import * as THREE from "three";
+import { VoxelTerrainMesh } from "./terrain/terrain-mesh";
+import { WaterMesh } from "./terrain/water-mesh";
+import { Waterfall } from "./terrain/waterfall";
+import { Bridge } from "./terrain/bridge";
+import { getTerrainData } from "./terrain/terrain-data";
+import { Trees } from "./environment/trees";
+import { Rocks } from "./environment/rocks";
+import { Decorations } from "./environment/decorations";
 import { Fountain } from "./fountain";
-import { FpsController } from "./fps-controller";
+import { IsometricCamera } from "./camera-controller";
 import { DayNightCycle } from "./day-night-cycle";
 import { VillageHud } from "./village-hud";
 import { BuildingRenderer } from "./buildings";
 import { VillageCreatures } from "./creatures";
+import { WeatherSystem } from "./effects/weather-system";
+import { SmokeParticles } from "./effects/smoke-particles";
+import { EmberParticles } from "./effects/ember-particles";
+import { DustParticles } from "./effects/dust-particles";
 import type { VillageBuilding } from "@/lib/village/types";
+import type { TerrainData } from "@/lib/village/terrain";
+import { getBlockHeight } from "@/lib/village/terrain";
+
+// Terrain context so any child can access heightmap
+export const TerrainContext = createContext<TerrainData | null>(null);
+export function useTerrainData() {
+  const ctx = useContext(TerrainContext);
+  if (!ctx) throw new Error("useTerrainData must be used within TerrainContext");
+  return ctx;
+}
 
 interface VillageCanvasProps {
   buildings: VillageBuilding[];
   timerState: "idle" | "focusing" | "paused" | "break";
 }
 
+const terrain = getTerrainData();
+
 export function VillageCanvas({ buildings, timerState }: VillageCanvasProps) {
-  const [cameraMode, setCameraMode] = useState<"orbit" | "fps">("orbit");
+  const [weather, setWeather] = useState<"clear" | "snow" | "rain">("clear");
+
+  // Find buildings that emit particles
+  const smokeBuildings = buildings.filter((b) => b.buildingType === "cottage" || b.buildingType === "bakery");
+  const emberBuildings = buildings.filter((b) => b.buildingType === "blacksmith");
+  const dustBuildings = buildings.filter((b) => b.buildingType === "mine");
 
   return (
     <div style={{ position: "relative", width: "100%", height: "70vh", borderRadius: 16, overflow: "hidden" }}>
       <Canvas
-        camera={{ position: [30, 25, 30], fov: 50 }}
+        orthographic
+        shadows={{ type: THREE.PCFSoftShadowMap }}
       >
-        <color attach="background" args={["#87CEEB"]} />
+        <color attach="background" args={["#b0dae8"]} />
+        <fogExp2 attach="fog" args={["#b0dae8", 0.004]} />
         <DayNightCycle timerState={timerState} />
-        <fog attach="fog" args={["#87CEEB", 80, 200]} />
+        <IsometricCamera />
 
-        {cameraMode === "orbit" ? (
-          <OrbitControls
-            target={[0, 0, 0]}
-            maxPolarAngle={Math.PI / 2.2}
-            minDistance={10}
-            maxDistance={80}
-            enableDamping
-            dampingFactor={0.05}
-          />
-        ) : (
-          <FpsController onExit={() => setCameraMode("orbit")} />
-        )}
+        <TerrainContext.Provider value={terrain}>
+          <VoxelTerrainMesh terrain={terrain} />
+          <WaterMesh terrain={terrain} />
+          <Waterfall terrain={terrain} />
+          <Bridge terrain={terrain} />
+          <Decorations terrain={terrain} />
+          <Trees terrain={terrain} />
+          <Rocks terrain={terrain} />
+          <Fountain terrain={terrain} />
 
-        <Ground buildings={buildings} />
-        <Fountain />
-        {buildings.map((b) => (
-          <BuildingRenderer key={b.id} building={b} timerState={timerState} />
-        ))}
-        <VillageCreatures buildings={buildings} timerState={timerState} />
+          {buildings.map((b) => (
+            <BuildingRenderer key={b.id} building={b} timerState={timerState} terrain={terrain} />
+          ))}
+          <VillageCreatures buildings={buildings} timerState={timerState} terrain={terrain} />
+
+          {/* Weather */}
+          <WeatherSystem weather={weather} />
+
+          {/* Building particles */}
+          {smokeBuildings.map((b) => (
+            <SmokeParticles
+              key={`smoke-${b.id}`}
+              position={[b.positionX, getBlockHeight(terrain.heightMap, b.positionX, b.positionZ) + 4, b.positionZ]}
+            />
+          ))}
+          {emberBuildings.map((b) => (
+            <EmberParticles
+              key={`ember-${b.id}`}
+              position={[b.positionX, getBlockHeight(terrain.heightMap, b.positionX, b.positionZ) + 1, b.positionZ]}
+            />
+          ))}
+          {dustBuildings.map((b) => (
+            <DustParticles
+              key={`dust-${b.id}`}
+              position={[b.positionX, getBlockHeight(terrain.heightMap, b.positionX, b.positionZ) + 0.5, b.positionZ]}
+            />
+          ))}
+        </TerrainContext.Provider>
       </Canvas>
+
+      {/* CSS vignette overlay */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          borderRadius: 16,
+          boxShadow: "inset 0 0 80px 30px rgba(0,0,0,0.3)",
+        }}
+      />
+
       <VillageHud
-        cameraMode={cameraMode}
-        onToggleCamera={() => setCameraMode((m) => (m === "orbit" ? "fps" : "orbit"))}
+        weather={weather}
+        onToggleWeather={() => setWeather((w) => w === "clear" ? "snow" : w === "snow" ? "rain" : "clear")}
       />
     </div>
   );

@@ -5,6 +5,7 @@ import { useRef, useMemo, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
 import type { Group } from "three";
 import type { VillageBuilding } from "@/lib/village/types";
+import { getBlockHeight, type TerrainData } from "@/lib/village/terrain";
 import {
   computeCreatures,
   initCreatureState,
@@ -16,9 +17,10 @@ import { Creature } from "./creature";
 interface VillageCreaturesProps {
   buildings: VillageBuilding[];
   timerState: "idle" | "focusing" | "paused" | "break";
+  terrain: TerrainData;
 }
 
-export function VillageCreatures({ buildings, timerState }: VillageCreaturesProps) {
+export function VillageCreatures({ buildings, timerState, terrain }: VillageCreaturesProps) {
   const configs = useMemo(() => computeCreatures(buildings), [buildings]);
 
   // All creature state managed in refs — no React state per frame
@@ -56,11 +58,13 @@ export function VillageCreatures({ buildings, timerState }: VillageCreaturesProp
     const states = statesRef.current;
     const groups = groupRefs.current;
     const walkRefs = walkingRefs.current;
+    const hm = terrain.heightMap;
 
     for (let i = 0; i < configs.length; i++) {
+      const config = configs[i];
       const newState = updateCreatureState(
         states[i],
-        configs[i],
+        config,
         delta,
         elapsed,
         isNight,
@@ -77,6 +81,17 @@ export function VillageCreatures({ buildings, timerState }: VillageCreaturesProp
       if (group) {
         group.position.x = newState.x;
         group.position.z = newState.z;
+
+        // Block-snapped height lookup
+        const terrainY = getBlockHeight(hm, newState.x, newState.z);
+
+        if (config.type === "bird") {
+          // Birds fly above terrain
+          group.position.y = terrainY + 8;
+        } else {
+          group.position.y = terrainY;
+        }
+
         group.rotation.y = newState.facingAngle;
       }
     }
@@ -86,7 +101,7 @@ export function VillageCreatures({ buildings, timerState }: VillageCreaturesProp
     groupRefs.current[index] = el;
   }, []);
 
-   
+
   return (
     <>
       {configs.map((config, i) => (

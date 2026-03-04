@@ -4,6 +4,7 @@ import { useRef, useEffect, useCallback } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
 import { PointerLockControls } from "@react-three/drei";
 import * as THREE from "three";
+import { getTerrainHeight, type TerrainData } from "@/lib/village/terrain";
 
 const WALK_SPEED = 4;
 const SPRINT_SPEED = 8;
@@ -14,18 +15,21 @@ const WORLD_BOUND = 80;
 
 interface FpsControllerProps {
   onExit: () => void;
+  terrain: TerrainData;
 }
 
-export function FpsController({ onExit }: FpsControllerProps) {
+export function FpsController({ onExit, terrain }: FpsControllerProps) {
   const { camera } = useThree();
-  const controlsRef = useRef<InstanceType<typeof PointerLockControls> | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const controlsRef = useRef<any>(null);
   const velocity = useRef(new THREE.Vector3());
   const keys = useRef<Set<string>>(new Set());
   const isGrounded = useRef(true);
 
   useEffect(() => {
-    camera.position.set(10, EYE_HEIGHT, 10);
-  }, [camera]);
+    const startY = getTerrainHeight(terrain.heightMap, 10, 10) + EYE_HEIGHT;
+    camera.position.set(10, startY, 10);
+  }, [camera, terrain]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     keys.current.add(e.code);
@@ -80,9 +84,11 @@ export function FpsController({ onExit }: FpsControllerProps) {
     velocity.current.y -= GRAVITY * dt;
     camera.position.y += velocity.current.y * dt;
 
-    // Floor
-    if (camera.position.y <= EYE_HEIGHT) {
-      camera.position.y = EYE_HEIGHT;
+    // Terrain-aware floor height
+    const floorY = getTerrainHeight(terrain.heightMap, camera.position.x, camera.position.z) + EYE_HEIGHT;
+
+    if (camera.position.y <= floorY) {
+      camera.position.y = floorY;
       velocity.current.y = 0;
       isGrounded.current = true;
     }

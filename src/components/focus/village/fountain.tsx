@@ -3,9 +3,19 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { getBlockHeight, gridToWorld, type TerrainData } from "@/lib/village/terrain";
 
-export function Fountain() {
+// Fountain is at the "fountain" building position in the grid (12, 13)
+const FOUNTAIN_GRID = { gx: 12, gy: 13 };
+
+interface FountainProps {
+  terrain: TerrainData;
+}
+
+export function Fountain({ terrain }: FountainProps) {
   const waterRef = useRef<THREE.Mesh>(null);
+  const pos = gridToWorld(FOUNTAIN_GRID.gx, FOUNTAIN_GRID.gy);
+  const y = getBlockHeight(terrain.heightMap, pos.x, pos.z);
 
   useFrame((_, delta) => {
     if (waterRef.current) {
@@ -14,7 +24,7 @@ export function Fountain() {
   });
 
   return (
-    <group position={[0, 0, 0]}>
+    <group position={[pos.x, y, pos.z]}>
       {/* Base pool */}
       <mesh position={[0, 0.3, 0]} castShadow receiveShadow>
         <cylinderGeometry args={[2.5, 3, 0.6, 16]} />

@@ -1,8 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { createClient } from "@/lib/supabase/server";
-import { getSpiralPosition } from "@/lib/village/spiral";
 import { getUnlockedTypes, type BuildingType, BUILDING_TIERS } from "@/lib/village/types";
+import { BUILDING_GRID_POSITIONS, gridToWorld } from "@/lib/village/terrain";
+
+// Map building types to grid positions for deterministic placement
+function getGridPosition(buildingType: string, gridIndex: number): { x: number; z: number; rotation: number } {
+  // Try to find a specific grid position for this building type
+  const gridEntry = BUILDING_GRID_POSITIONS.find((b) => b.name === buildingType);
+  if (gridEntry) {
+    const pos = gridToWorld(gridEntry.gx, gridEntry.gy);
+    return { x: pos.x, z: pos.z, rotation: 0 };
+  }
+
+  // Fallback: use grid index to assign from the position list
+  if (gridIndex < BUILDING_GRID_POSITIONS.length) {
+    const entry = BUILDING_GRID_POSITIONS[gridIndex];
+    const pos = gridToWorld(entry.gx, entry.gy);
+    return { x: pos.x, z: pos.z, rotation: 0 };
+  }
+
+  // Extra fallback for overflow (shouldn't happen with 24 slots)
+  const angle = gridIndex * 137.5 * (Math.PI / 180);
+  const radius = Math.sqrt(gridIndex) * 8;
+  return {
+    x: Math.cos(angle) * radius,
+    z: Math.sin(angle) * radius,
+    rotation: Math.atan2(-Math.cos(angle) * radius, -Math.sin(angle) * radius),
+  };
+}
 
 export async function GET() {
   try {
@@ -111,8 +137,8 @@ export async function POST(req: NextRequest) {
   });
   const gridIndex = (lastBuilding?.gridIndex ?? -1) + 1;
 
-  // Compute spiral position
-  const { x, z, rotation } = getSpiralPosition(gridIndex);
+  // Compute grid-based position
+  const { x, z, rotation } = getGridPosition(buildingType, gridIndex);
 
   const building = await prisma.villageBuilding.create({
     data: {
