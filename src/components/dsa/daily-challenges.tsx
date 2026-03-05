@@ -33,6 +33,14 @@ import {
 const EASY_POOL = DAILY_PROBLEM_POOL.filter((p) => p.difficulty === "Easy");
 const MED_POOL = DAILY_PROBLEM_POOL.filter((p) => p.difficulty === "Medium");
 
+// Knuth multiplicative hash to scatter daily picks across the pool
+function hashDay(day: number, poolSize: number): number {
+  let h = day * 2654435761;
+  h = ((h >>> 16) ^ h) * 0x45d9f3b;
+  h = ((h >>> 16) ^ h);
+  return Math.abs(h) % poolSize;
+}
+
 const TIME_LIMIT: Record<string, number> = {
   easy: 20 * 60,
   medium: 40 * 60,
@@ -202,8 +210,8 @@ interface CompletionMap {
 
 export function DailyChallenges() {
   const dayOfYear = getDayOfYear();
-  const easyPick = EASY_POOL.length > 0 ? EASY_POOL[dayOfYear % EASY_POOL.length] : null;
-  const medPick = MED_POOL.length > 0 ? MED_POOL[dayOfYear % MED_POOL.length] : null;
+  const easyPick = EASY_POOL.length > 0 ? EASY_POOL[hashDay(dayOfYear, EASY_POOL.length)] : null;
+  const medPick = MED_POOL.length > 0 ? MED_POOL[hashDay(dayOfYear, MED_POOL.length)] : null;
   const [completions, setCompletions] = useState<CompletionMap>({});
 
   useEffect(() => {
