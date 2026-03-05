@@ -1,6 +1,25 @@
 "use client";
 
+import { useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import * as THREE from "three";
+
 export function Bakery() {
+  const ovenRef = useRef<THREE.Mesh>(null);
+  const windowRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    if (ovenRef.current) {
+      const mat = ovenRef.current.material as THREE.MeshStandardMaterial;
+      mat.emissiveIntensity = 0.2 + Math.sin(t * 4) * 0.1 + Math.sin(t * 7) * 0.05;
+    }
+    if (windowRef.current) {
+      const mat = windowRef.current.material as THREE.MeshStandardMaterial;
+      mat.emissiveIntensity = 0.15 + Math.sin(t * 2) * 0.05;
+    }
+  });
+
   return (
     <group>
       {/* Main building */}
@@ -28,14 +47,14 @@ export function Bakery() {
         <meshStandardMaterial color="#6B4226" />
       </mesh>
       {/* Display window (large) */}
-      <mesh position={[-1, 1.3, 1.51]}>
+      <mesh ref={windowRef} position={[-1, 1.3, 1.51]}>
         <boxGeometry args={[0.8, 0.7, 0.1]} />
         <meshStandardMaterial color="#FFE4B5" emissive="#FFD700" emissiveIntensity={0.15} />
       </mesh>
       {/* Oven (brick structure on side) */}
-      <mesh position={[1.76, 0.8, 0]} castShadow>
+      <mesh ref={ovenRef} position={[1.76, 0.8, 0]} castShadow>
         <cylinderGeometry args={[0.8, 0.8, 1.6, 8]} />
-        <meshStandardMaterial color="#CD853F" />
+        <meshStandardMaterial color="#CD853F" emissive="#FF6600" emissiveIntensity={0.2} />
       </mesh>
       {/* Awning */}
       <mesh position={[0, 2.1, 2]} castShadow>

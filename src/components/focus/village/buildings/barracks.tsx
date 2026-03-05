@@ -1,6 +1,20 @@
 "use client";
 
+import { useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import * as THREE from "three";
+
 export function Barracks() {
+  const flagRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    if (flagRef.current) {
+      const t = state.clock.elapsedTime;
+      flagRef.current.rotation.y = Math.sin(t * 3) * 0.15;
+      flagRef.current.position.x = 2.5 + Math.sin(t * 2.5) * 0.05;
+    }
+  });
+
   return (
     <group>
       {/* Main building */}
@@ -47,7 +61,7 @@ export function Barracks() {
         </mesh>
       ))}
       {/* Flag */}
-      <mesh position={[2.5, 4, 0]}>
+      <mesh ref={flagRef} position={[2.5, 4, 0]}>
         <planeGeometry args={[0.7, 0.5]} />
         <meshStandardMaterial color="#C0392B" side={2} />
       </mesh>

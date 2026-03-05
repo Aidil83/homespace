@@ -1,6 +1,19 @@
 "use client";
 
+import { useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import * as THREE from "three";
+
 export function Stable() {
+  const doorRef = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (doorRef.current) {
+      const t = state.clock.elapsedTime;
+      doorRef.current.rotation.y = Math.sin(t * 0.5) * 0.05;
+    }
+  });
+
   return (
     <group>
       {/* Main barn */}
@@ -25,10 +38,19 @@ export function Stable() {
             <meshStandardMaterial color="#5D3A1A" />
           </mesh>
           {/* Half-door (lower) */}
-          <mesh position={[x, 0.4, 2.05]}>
-            <boxGeometry args={[1.2, 0.8, 0.05]} />
-            <meshStandardMaterial color="#4A2A0A" />
-          </mesh>
+          {i === 1 ? (
+            <group ref={doorRef} position={[x - 0.6, 0.4, 2.05]}>
+              <mesh position={[0.6, 0, 0]}>
+                <boxGeometry args={[1.2, 0.8, 0.05]} />
+                <meshStandardMaterial color="#4A2A0A" />
+              </mesh>
+            </group>
+          ) : (
+            <mesh position={[x, 0.4, 2.05]}>
+              <boxGeometry args={[1.2, 0.8, 0.05]} />
+              <meshStandardMaterial color="#4A2A0A" />
+            </mesh>
+          )}
         </group>
       ))}
       {/* Hay bales */}

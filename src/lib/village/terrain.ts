@@ -89,44 +89,90 @@ export function generateTerrain(): TerrainData {
       const ny = gy / GRID;
       let h = 0;
 
-      // Hilltop district (top-right)
-      if (gx >= 14 && gy < 10) {
-        h = 5 + Math.sin(nx * Math.PI * 3) * 2.5 + Math.cos(ny * Math.PI * 2) * 2.5;
+      // Global base: higher inland, lower at coast
+      h += (1 - ny) * 3;
+
+      // Zone 1: Northwest meadow hills (h ~3-8)
+      if (gx < 12 && gy < 8) {
+        h += 4 + Math.sin(nx * Math.PI * 4 + 1.7) * 2 + Math.cos(ny * Math.PI * 3.5 + 0.9) * 1.8;
+        // Prominent knoll near (5, 3)
+        const dist = Math.sqrt((gx - 5) ** 2 + (gy - 3) ** 2);
+        if (dist < 6) h += (6 - dist) * 0.8;
+        // Secondary rise near (2, 6)
+        const dist2 = Math.sqrt((gx - 2) ** 2 + (gy - 6) ** 2);
+        if (dist2 < 4) h += (4 - dist2) * 0.6;
+        // Zone-specific noise for unique shape
+        h += Math.sin(nx * Math.PI * 5.3 + ny * 2.1) * 1.2;
+        h += Math.cos(nx * Math.PI * 2.7 + ny * 4.3) * 0.9;
+      }
+      // Zone 2: Hilltop district (top-right) — dramatic focal point (h ~8-14)
+      else if (gx >= 14 && gy < 10) {
+        h = 8 + Math.sin(nx * Math.PI * 3) * 3 + Math.cos(ny * Math.PI * 2) * 3;
         // Peak near (18, 4)
         const dist = Math.sqrt((gx - 18) ** 2 + (gy - 4) ** 2);
-        if (dist < 5) h += (5 - dist) * 1.0;
+        if (dist < 5) h += (5 - dist) * 1.4;
         // Back-edge cliff
-        if (gy <= 1 && gx >= 16) h = 8 + Math.sin(nx * Math.PI * 3) * 1.5;
+        if (gy <= 1 && gx >= 16) h = 12 + Math.sin(nx * Math.PI * 3) * 2;
         // Diagonal cliff fade
         const sum = gx + gy;
         if (sum >= 20 && sum <= 24) {
           const cliffFactor = (sum - 20) / 4;
-          h *= 1 - cliffFactor * 0.6;
+          h *= 1 - cliffFactor * 0.5;
         }
+        // Zone-specific noise
+        h += Math.sin(nx * Math.PI * 6.1 + ny * 3.7) * 1;
       }
-      // Farming hills (right lower)
+      // Zone 3: Farming slopes (right lower) — terraced hills (h ~3-7)
       else if (gx >= 14 && gy >= 10) {
-        h = Math.sin(nx * Math.PI * 2 + ny) * 2 + 2.5;
+        h += 3 + Math.sin(nx * Math.PI * 3 + 2.3) * 2.5 + Math.cos(ny * Math.PI * 4 + 1.1) * 2;
+        // Terrace step near stable (17, 12)
+        const dist = Math.sqrt((gx - 17) ** 2 + (gy - 12) ** 2);
+        if (dist < 4) h += (4 - dist) * 0.7;
+        // Ridge near (19, 14)
+        const dist2 = Math.sqrt((gx - 19) ** 2 + (gy - 14) ** 2);
+        if (dist2 < 3) h += (3 - dist2) * 0.8;
+        // Zone-specific noise
+        h += Math.sin(nx * Math.PI * 4.7 + ny * 5.9) * 1.1;
+        h += Math.cos(nx * Math.PI * 3.3 + ny * 1.8) * 0.7;
       }
-      // Residential (left center)
+      // Zone 4: Residential terraces (left center) — undulating (h ~2-6)
       else if (gx < 14 && gy >= 8 && gy < 16) {
-        h = Math.sin(nx * Math.PI * 3 + ny * 2) * 1.5 + 1;
+        h += 3 + Math.sin(nx * Math.PI * 3.5 + 0.5) * 2 + Math.cos(ny * Math.PI * 2.5 + 1.3) * 1.5;
+        // Knoll near chapel area (9, 13)
+        const dist = Math.sqrt((gx - 9) ** 2 + (gy - 13) ** 2);
+        if (dist < 4) h += (4 - dist) * 0.6;
+        // Dip near (5, 10) — creates a small valley
+        const dist2 = Math.sqrt((gx - 5) ** 2 + (gy - 10) ** 2);
+        if (dist2 < 3) h -= (3 - dist2) * 0.5;
+        // Zone-specific noise
+        h += Math.sin(nx * Math.PI * 6.3 + ny * 4.1) * 0.9;
+        h += Math.cos(nx * Math.PI * 3.9 + ny * 6.7) * 0.6;
       }
-      // Market center
-      else if (gx >= 9 && gx < 16 && gy >= 9 && gy < 16) {
-        h = Math.sin(nx * Math.PI * 2) * 0.8 + 0.8;
-      }
-      // Waterfront (bottom)
+      // Zone 5: Waterfront bluffs (bottom) — coastal shelf (h ~1-4)
       else if (gy >= 16) {
-        h = Math.sin(nx * Math.PI * 3 + ny) * 0.6 + 0.3;
+        const shoreRise = Math.max(0, (20 - gy)) * 0.8;
+        h += shoreRise + Math.sin(nx * Math.PI * 3 + 1.9) * 1.2 + 1;
+        // Bluff near (4, 17)
+        const dist = Math.sqrt((gx - 4) ** 2 + (gy - 17) ** 2);
+        if (dist < 3) h += (3 - dist) * 0.7;
+        // Zone-specific noise
+        h += Math.sin(nx * Math.PI * 5.1 + ny * 3.3) * 0.8;
       }
 
-      // General noise (3 octaves)
-      h += Math.sin(nx * Math.PI * 4 + ny * 3) * 1;
-      h += Math.cos(ny * Math.PI * 3 + nx * 2) * 0.8;
-      h += Math.sin(nx * Math.PI * 7 + ny * 5) * 0.5;
+      // Zone 6: River valley depression (global modifier)
+      const riverGx = 22 - gy;
+      const distToRiver = Math.abs(gx - riverGx);
+      if (distToRiver < 4 && tileTypes[idx] !== "water") {
+        h *= 0.5 + distToRiver * 0.125;
+      }
 
-      heightMap[idx] = Math.max(0, h);
+      // General noise (4 octaves with varied seeds)
+      h += Math.sin(nx * Math.PI * 4 + ny * 3) * 1.2;
+      h += Math.cos(ny * Math.PI * 3 + nx * 2) * 1;
+      h += Math.sin(nx * Math.PI * 7 + ny * 5) * 0.6;
+      h += Math.cos(nx * Math.PI * 11 + ny * 7) * 0.4;
+
+      heightMap[idx] = Math.max(0.3, h);
     }
   }
 

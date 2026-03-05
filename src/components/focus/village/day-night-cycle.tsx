@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Stars } from "@react-three/drei";
+import { Stars, Sky } from "@react-three/drei";
 import * as THREE from "three";
 
 interface DayNightCycleProps {
@@ -18,27 +18,31 @@ const LIGHTING: Record<string, {
   hemiGroundColor: string;
   hemiIntensity: number;
   fillIntensity: number;
-  fogDensity: number;
+  sunPosition: [number, number, number];
 }> = {
   idle: {
-    ambient: 0.35, sunColor: "#ffffff", sunIntensity: 0.8, skyColor: "#b0dae8",
-    hemiSkyColor: "#87CEEB", hemiGroundColor: "#4a7c3f", hemiIntensity: 0.4,
-    fillIntensity: 0.12, fogDensity: 0.004,
+    ambient: 1.0, sunColor: "#FFFFFF", sunIntensity: 2.5, skyColor: "#87CEEB",
+    hemiSkyColor: "#87CEEB", hemiGroundColor: "#7BC46A", hemiIntensity: 1.2,
+    fillIntensity: 0.5,
+    sunPosition: [80, 150, 40],
   },
   focusing: {
-    ambient: 0.4, sunColor: "#FDB813", sunIntensity: 1.0, skyColor: "#8ec5d6",
-    hemiSkyColor: "#FDB813", hemiGroundColor: "#8B6914", hemiIntensity: 0.5,
-    fillIntensity: 0.15, fogDensity: 0.003,
+    ambient: 1.1, sunColor: "#FFF5D4", sunIntensity: 2.8, skyColor: "#7EC8E3",
+    hemiSkyColor: "#FFF0B0", hemiGroundColor: "#8BC46A", hemiIntensity: 1.3,
+    fillIntensity: 0.6,
+    sunPosition: [80, 120, 40],
   },
   paused: {
     ambient: 0.3, sunColor: "#E8751A", sunIntensity: 0.6, skyColor: "#E8836B",
     hemiSkyColor: "#E8836B", hemiGroundColor: "#5D3A1A", hemiIntensity: 0.35,
-    fillIntensity: 0.09, fogDensity: 0.006,
+    fillIntensity: 0.09,
+    sunPosition: [100, 5, 50],
   },
   break: {
     ambient: 0.15, sunColor: "#6B8FC7", sunIntensity: 0.3, skyColor: "#0F1B3D",
     hemiSkyColor: "#1A2550", hemiGroundColor: "#0A0F20", hemiIntensity: 0.15,
-    fillIntensity: 0.045, fogDensity: 0.008,
+    fillIntensity: 0.045,
+    sunPosition: [100, -20, 50],
   },
 };
 
@@ -56,7 +60,10 @@ export function DayNightCycle({ timerState }: DayNightCycleProps) {
   const currentHemiSky = useRef(new THREE.Color(target.hemiSkyColor));
   const currentHemiGround = useRef(new THREE.Color(target.hemiGroundColor));
   const currentFillIntensity = useRef(target.fillIntensity);
-  const currentFogDensity = useRef(target.fogDensity);
+  const currentSunPos = useRef<[number, number, number]>([...target.sunPosition]);
+  // Scratch colors to avoid per-frame allocations
+  const _scratchColor = useRef(new THREE.Color());
+  const _scratchBg = useRef(new THREE.Color(target.skyColor));
 
   useFrame((state, delta) => {
     const lerpSpeed = 1.5 * delta;
@@ -69,7 +76,7 @@ export function DayNightCycle({ timerState }: DayNightCycleProps) {
 
     // Lerp directional (sun) light
     currentSunIntensity.current = THREE.MathUtils.lerp(currentSunIntensity.current, target.sunIntensity, lerpSpeed);
-    currentSunColor.current.lerp(new THREE.Color(target.sunColor), lerpSpeed);
+    currentSunColor.current.lerp(_scratchColor.current.set(target.sunColor), lerpSpeed);
     if (directionalRef.current) {
       directionalRef.current.intensity = currentSunIntensity.current;
       directionalRef.current.color.copy(currentSunColor.current);
@@ -77,8 +84,8 @@ export function DayNightCycle({ timerState }: DayNightCycleProps) {
 
     // Lerp hemisphere light
     currentHemiIntensity.current = THREE.MathUtils.lerp(currentHemiIntensity.current, target.hemiIntensity, lerpSpeed);
-    currentHemiSky.current.lerp(new THREE.Color(target.hemiSkyColor), lerpSpeed);
-    currentHemiGround.current.lerp(new THREE.Color(target.hemiGroundColor), lerpSpeed);
+    currentHemiSky.current.lerp(_scratchColor.current.set(target.hemiSkyColor), lerpSpeed);
+    currentHemiGround.current.lerp(_scratchColor.current.set(target.hemiGroundColor), lerpSpeed);
     if (hemiRef.current) {
       hemiRef.current.intensity = currentHemiIntensity.current;
       hemiRef.current.color.copy(currentHemiSky.current);
@@ -91,21 +98,14 @@ export function DayNightCycle({ timerState }: DayNightCycleProps) {
       fillRef.current.intensity = currentFillIntensity.current;
     }
 
-    // Lerp fog density
-    currentFogDensity.current = THREE.MathUtils.lerp(currentFogDensity.current, target.fogDensity, lerpSpeed);
-    const fog = state.scene.fog;
-    if (fog instanceof THREE.FogExp2) {
-      fog.density = currentFogDensity.current;
-    }
+    // Lerp sun position for Sky
+    currentSunPos.current[0] = THREE.MathUtils.lerp(currentSunPos.current[0], target.sunPosition[0], lerpSpeed);
+    currentSunPos.current[1] = THREE.MathUtils.lerp(currentSunPos.current[1], target.sunPosition[1], lerpSpeed);
+    currentSunPos.current[2] = THREE.MathUtils.lerp(currentSunPos.current[2], target.sunPosition[2], lerpSpeed);
 
-    // Update fog color
-    const targetFog = new THREE.Color(target.skyColor);
-    if (fog instanceof THREE.FogExp2) {
-      fog.color.lerp(targetFog, lerpSpeed);
-    } else if (fog instanceof THREE.Fog) {
-      fog.color.lerp(targetFog, lerpSpeed);
-    }
-    state.scene.background = fog ? fog.color.clone() : targetFog;
+    // Update scene background color
+    _scratchBg.current.lerp(_scratchColor.current.set(target.skyColor), lerpSpeed);
+    state.scene.background = _scratchBg.current;
   });
 
   return (
@@ -136,6 +136,15 @@ export function DayNightCycle({ timerState }: DayNightCycleProps) {
         intensity={target.fillIntensity}
         color="#ffffff"
       />
+      {/* eslint-disable react-hooks/refs -- R3F: ref is updated per-frame in useFrame, read here intentionally */}
+      <Sky
+        sunPosition={currentSunPos.current}
+        turbidity={8}
+        rayleigh={2}
+        mieCoefficient={0.005}
+        mieDirectionalG={0.8}
+      />
+      {/* eslint-enable react-hooks/refs */}
       {timerState === "break" && <Stars radius={100} depth={50} count={2000} factor={4} fade />}
     </>
   );

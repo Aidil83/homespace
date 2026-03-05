@@ -1,6 +1,29 @@
 "use client";
 
+import { useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import * as THREE from "three";
+
 export function Mine() {
+  const cartRef = useRef<THREE.Mesh>(null);
+  const wheelLeftRef = useRef<THREE.Mesh>(null);
+  const wheelRightRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state, delta) => {
+    const t = state.clock.elapsedTime;
+    if (cartRef.current) {
+      cartRef.current.position.z = 1.5 + Math.sin(t * 0.8) * 0.8;
+    }
+    if (wheelLeftRef.current) {
+      wheelLeftRef.current.position.z = 1.5 + Math.sin(t * 0.8) * 0.8;
+      wheelLeftRef.current.rotation.x += delta * 2 * Math.cos(t * 0.8);
+    }
+    if (wheelRightRef.current) {
+      wheelRightRef.current.position.z = 1.5 + Math.sin(t * 0.8) * 0.8;
+      wheelRightRef.current.rotation.x += delta * 2 * Math.cos(t * 0.8);
+    }
+  });
+
   return (
     <group>
       {/* Mine entrance - carved into hill */}
@@ -27,16 +50,16 @@ export function Mine() {
         <meshStandardMaterial color="#6B4226" />
       </mesh>
       {/* Ore cart */}
-      <mesh position={[1.8, 0.3, 1.5]} castShadow>
+      <mesh ref={cartRef} position={[1.8, 0.3, 1.5]} castShadow>
         <boxGeometry args={[0.8, 0.5, 0.6]} />
         <meshStandardMaterial color="#555" />
       </mesh>
       {/* Cart wheels */}
-      <mesh position={[1.5, 0.15, 1.5]} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh ref={wheelLeftRef} position={[1.5, 0.15, 1.5]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.15, 0.15, 0.05, 8]} />
         <meshStandardMaterial color="#333" />
       </mesh>
-      <mesh position={[2.1, 0.15, 1.5]} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh ref={wheelRightRef} position={[2.1, 0.15, 1.5]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.15, 0.15, 0.05, 8]} />
         <meshStandardMaterial color="#333" />
       </mesh>

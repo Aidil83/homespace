@@ -1,6 +1,20 @@
 "use client";
 
+import { useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import * as THREE from "three";
+
 export function Castle() {
+  const bannerRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    if (bannerRef.current) {
+      const t = state.clock.elapsedTime;
+      bannerRef.current.rotation.y = Math.sin(t * 2.8) * 0.12;
+      bannerRef.current.rotation.z = Math.sin(t * 3.5) * 0.04;
+    }
+  });
+
   return (
     <group>
       {/* Main keep */}
@@ -51,7 +65,7 @@ export function Castle() {
         </mesh>
       ))}
       {/* Banner */}
-      <mesh position={[0, 6, 2.6]}>
+      <mesh ref={bannerRef} position={[0, 6, 2.6]}>
         <planeGeometry args={[0.8, 1.2]} />
         <meshStandardMaterial color="#C0392B" side={2} />
       </mesh>

@@ -1,6 +1,20 @@
 "use client";
 
+import { useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import * as THREE from "three";
+
 export function Dock() {
+  const boatRef = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (boatRef.current) {
+      const t = state.clock.elapsedTime;
+      boatRef.current.position.y = 0.1 + Math.sin(t * 1.5) * 0.08;
+      boatRef.current.rotation.z = Math.sin(t * 1.2) * 0.03;
+    }
+  });
+
   return (
     <group>
       {/* Main dock platform */}
@@ -32,7 +46,7 @@ export function Dock() {
         <meshStandardMaterial color="#5D3A1A" />
       </mesh>
       {/* Small boat */}
-      <group position={[0, 0.1, -2]} rotation={[0, 0.3, 0]}>
+      <group ref={boatRef} position={[0, 0.1, -2]} rotation={[0, 0.3, 0]}>
         {/* Hull */}
         <mesh castShadow>
           <boxGeometry args={[1, 0.4, 2.5]} />

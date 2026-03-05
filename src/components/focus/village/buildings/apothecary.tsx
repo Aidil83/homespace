@@ -1,6 +1,27 @@
 "use client";
 
+import { useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import * as THREE from "three";
+
+const BOTTLE_COLORS = ["#FF6347", "#4169E1", "#32CD32"] as const;
+
 export function Apothecary() {
+  const bottle0Ref = useRef<THREE.Mesh>(null);
+  const bottle1Ref = useRef<THREE.Mesh>(null);
+  const bottle2Ref = useRef<THREE.Mesh>(null);
+  const bottlesRef = useRef([bottle0Ref, bottle1Ref, bottle2Ref]);
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    bottlesRef.current.forEach((ref, i) => {
+      if (ref.current) {
+        const mat = ref.current.material as THREE.MeshStandardMaterial;
+        mat.emissiveIntensity = 0.3 + Math.sin(t * 2 + i * 2) * 0.15;
+      }
+    });
+  });
+
   return (
     <group>
       {/* Main building */}
@@ -37,9 +58,13 @@ export function Apothecary() {
       ))}
       {/* Potion bottles on shelf (side) */}
       {[0.5, 0.8, 1.1].map((y, i) => (
-        <mesh key={i} position={[1.51, y + 0.8, 0]}>
+        <mesh
+          key={i}
+          ref={[bottle0Ref, bottle1Ref, bottle2Ref][i]}
+          position={[1.51, y + 0.8, 0]}
+        >
           <cylinderGeometry args={[0.08, 0.08, 0.2, 6]} />
-          <meshStandardMaterial color={["#FF6347", "#4169E1", "#32CD32"][i]} emissive={["#FF6347", "#4169E1", "#32CD32"][i]} emissiveIntensity={0.3} />
+          <meshStandardMaterial color={BOTTLE_COLORS[i]} emissive={BOTTLE_COLORS[i]} emissiveIntensity={0.3} />
         </mesh>
       ))}
       {/* Hanging sign */}

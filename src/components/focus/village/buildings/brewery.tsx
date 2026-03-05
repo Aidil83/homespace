@@ -1,6 +1,19 @@
 "use client";
 
+import { useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import * as THREE from "three";
+
 export function Brewery() {
+  const signRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    if (signRef.current) {
+      const t = state.clock.elapsedTime;
+      signRef.current.rotation.z = Math.sin(t * 1.5) * 0.06;
+    }
+  });
+
   return (
     <group>
       {/* Main building */}
@@ -44,7 +57,7 @@ export function Brewery() {
         </mesh>
       ))}
       {/* Sign */}
-      <mesh position={[0, 2.5, 1.8]}>
+      <mesh ref={signRef} position={[0, 2.5, 1.8]}>
         <boxGeometry args={[1.5, 0.5, 0.1]} />
         <meshStandardMaterial color="#5D3A1A" />
       </mesh>

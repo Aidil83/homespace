@@ -21,6 +21,9 @@ import { WeatherSystem } from "./effects/weather-system";
 import { SmokeParticles } from "./effects/smoke-particles";
 import { EmberParticles } from "./effects/ember-particles";
 import { DustParticles } from "./effects/dust-particles";
+import { BuildingShadows } from "./effects/building-shadows";
+import { GrassBillboards } from "./environment/grass-billboards";
+import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import type { VillageBuilding } from "@/lib/village/types";
 import type { TerrainData } from "@/lib/village/terrain";
 import { getBlockHeight } from "@/lib/village/terrain";
@@ -54,8 +57,7 @@ export function VillageCanvas({ buildings, timerState }: VillageCanvasProps) {
         orthographic
         shadows={{ type: THREE.PCFSoftShadowMap }}
       >
-        <color attach="background" args={["#b0dae8"]} />
-        <fogExp2 attach="fog" args={["#b0dae8", 0.004]} />
+        {/* fog removed for clarity */}
         <DayNightCycle timerState={timerState} />
         <IsometricCamera />
 
@@ -67,8 +69,10 @@ export function VillageCanvas({ buildings, timerState }: VillageCanvasProps) {
           <Decorations terrain={terrain} />
           <Trees terrain={terrain} />
           <Rocks terrain={terrain} />
+          <GrassBillboards terrain={terrain} />
           <Fountain terrain={terrain} />
 
+          <BuildingShadows buildings={buildings} terrain={terrain} />
           {buildings.map((b) => (
             <BuildingRenderer key={b.id} building={b} timerState={timerState} terrain={terrain} />
           ))}
@@ -97,6 +101,15 @@ export function VillageCanvas({ buildings, timerState }: VillageCanvasProps) {
             />
           ))}
         </TerrainContext.Provider>
+
+        {/* Post-processing effects */}
+        <EffectComposer>
+          <Bloom
+            luminanceThreshold={0.6}
+            luminanceSmoothing={0.5}
+            intensity={0.4}
+          />
+        </EffectComposer>
       </Canvas>
 
       {/* CSS vignette overlay */}
