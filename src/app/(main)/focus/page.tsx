@@ -1,7 +1,7 @@
-"use client";
-
-import { FocusDashboard } from "@/components/focus/focus-dashboard";
-
 export default function FocusPage() {
-  return <FocusDashboard />;
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <p className="text-muted-foreground">Coming soon</p>
+    </div>
+  );
 }
