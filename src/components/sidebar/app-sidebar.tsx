@@ -33,6 +33,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -58,6 +59,15 @@ export function AppSidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
+  const { setOpen, setOpenMobile, isMobile } = useSidebar();
+
+  const closeSidebar = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    } else {
+      setOpen(false);
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -199,7 +209,7 @@ export function AppSidebar() {
             />
           </button>
           <SidebarMenuButton asChild isActive={isActive} className="flex-1">
-            <a href={`/${page.id}`}>
+            <a href={`/${page.id}`} onClick={closeSidebar}>
               <FileText className="h-4 w-4" />
               <span>
                 {page.icon || ""} {page.title}
@@ -251,7 +261,7 @@ export function AppSidebar() {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={pathname === "/gym"}>
-                  <Link href="/gym">
+                  <Link href="/gym" onClick={closeSidebar}>
                     <Dumbbell className="h-4 w-4" />
                     <span>Gym</span>
                   </Link>
@@ -259,7 +269,7 @@ export function AppSidebar() {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={pathname === "/routine"}>
-                  <Link href="/routine">
+                  <Link href="/routine" onClick={closeSidebar}>
                     <Clock className="h-4 w-4" />
                     <span>Routine</span>
                   </Link>
@@ -267,7 +277,7 @@ export function AppSidebar() {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={pathname === "/focus"}>
-                  <Link href="/focus">
+                  <Link href="/focus" onClick={closeSidebar}>
                     <Flame className="h-4 w-4" />
                     <span>Focus</span>
                   </Link>
@@ -275,7 +285,7 @@ export function AppSidebar() {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={pathname.startsWith("/dsa")}>
-                  <Link href="/dsa">
+                  <Link href="/dsa" onClick={closeSidebar}>
                     <Code className="h-4 w-4" />
                     <span>DSA</span>
                   </Link>
