@@ -649,8 +649,10 @@ function BoardGameRoadmap({
     <div style={{ marginTop: 16 }}>
       <style>{`
         @keyframes pulseGlow {
-          0%, 100% { opacity: 0.3; transform: scale(1); }
-          50% { opacity: 1; transform: scale(1.6); }
+          0% { opacity: 0; transform: scale(1); }
+          5% { opacity: 0.7; transform: scale(1.05); }
+          60% { opacity: 0; transform: scale(1.6); }
+          100% { opacity: 0; transform: scale(1.6); }
         }
         @keyframes nodeAppear {
           0% { opacity: 0; transform: scale(0.5); }
@@ -685,7 +687,7 @@ function BoardGameRoadmap({
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
-          <filter id="bigGlow">
+          <filter id="bigGlow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="8" result="b" />
             <feMerge>
               <feMergeNode in="b" />
@@ -765,7 +767,7 @@ function BoardGameRoadmap({
                   stroke="#8b5cf6"
                   strokeWidth={3}
                   style={{
-                    animation: "pulseGlow 3s ease-in-out infinite",
+                    animation: "pulseGlow 2.5s ease-out infinite",
                     transformOrigin: `${pos.x}px ${pos.y}px`,
                   }}
                 />

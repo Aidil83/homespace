@@ -192,7 +192,7 @@ export function RoadmapBoard({
           const isAchieved = node.isPast || node.isCurrent;
           return (
             <g key={i}>
-              {/* Pulse ring for current */}
+              {/* Ripple ring for current */}
               {node.isCurrent && (
                 <circle
                   cx={node.x}
@@ -201,17 +201,19 @@ export function RoadmapBoard({
                   fill="none"
                   stroke="#8b5cf6"
                   strokeWidth={2.5}
-                  opacity="0.5"
+                  opacity="0"
                 >
                   <animate
                     attributeName="r"
-                    values={`${nodeR + 2};${nodeR + 8};${nodeR + 2}`}
+                    values={`${nodeR + 2};${nodeR + 4};${nodeR + 16};${nodeR + 16}`}
+                    keyTimes="0;0.05;0.6;1"
                     dur="2.5s"
                     repeatCount="indefinite"
                   />
                   <animate
                     attributeName="opacity"
-                    values="0.5;0.1;0.5"
+                    values="0;0.6;0;0"
+                    keyTimes="0;0.05;0.6;1"
                     dur="2.5s"
                     repeatCount="indefinite"
                   />
