@@ -2,9 +2,19 @@
 
 import { WOS, SAMPLE_EXERCISES, ACCENT_COLORS } from "./watch-constants";
 
-export function WatchExerciseList() {
-  const completed = SAMPLE_EXERCISES.filter((e) => e.done).length;
-  const nextIdx = SAMPLE_EXERCISES.findIndex((e) => !e.done);
+interface WatchExerciseListProps {
+  onAction?: (exerciseIndex: number) => void;
+  onEndWorkout?: () => void;
+  completedSet?: Set<number>;
+}
+
+export function WatchExerciseList({ onAction, onEndWorkout, completedSet }: WatchExerciseListProps = {}) {
+  const doneCount = completedSet
+    ? SAMPLE_EXERCISES.filter((_, i) => SAMPLE_EXERCISES[i].done || completedSet.has(i)).length
+    : SAMPLE_EXERCISES.filter((e) => e.done).length;
+  const nextIdx = SAMPLE_EXERCISES.findIndex((e, i) =>
+    completedSet ? !e.done && !completedSet.has(i) : !e.done
+  );
 
   return (
     <div
@@ -42,7 +52,7 @@ export function WatchExerciseList() {
             color: WOS.green,
           }}
         >
-          {completed}/8
+          {doneCount}/8
         </span>
       </div>
 
@@ -60,10 +70,12 @@ export function WatchExerciseList() {
         }}
       >
         {SAMPLE_EXERCISES.map((exercise, i) => {
+          const isDone = exercise.done || (completedSet?.has(i) ?? false);
           const isNext = i === nextIdx;
           return (
           <div
             key={exercise.name}
+            onClick={() => onAction?.(i)}
             style={{
               display: "flex",
               alignItems: "center",
@@ -73,6 +85,7 @@ export function WatchExerciseList() {
               backgroundColor: isNext ? `${ACCENT_COLORS[i]}14` : "transparent",
               borderRadius: isNext ? 10 : 0,
               position: "relative",
+              cursor: onAction ? "pointer" : "default",
             }}
           >
             {/* NEXT badge */}
@@ -134,15 +147,15 @@ export function WatchExerciseList() {
                 width: 22,
                 height: 22,
                 borderRadius: 11,
-                border: exercise.done ? "none" : `2px solid ${WOS.gray}`,
-                backgroundColor: exercise.done ? WOS.green : "transparent",
+                border: isDone ? "none" : `2px solid ${WOS.gray}`,
+                backgroundColor: isDone ? WOS.green : "transparent",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 flexShrink: 0,
               }}
             >
-              {exercise.done && (
+              {isDone && (
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
@@ -151,6 +164,27 @@ export function WatchExerciseList() {
           </div>
           );
         })}
+
+        {/* End Workout button */}
+        {onEndWorkout && (
+          <button
+            onClick={onEndWorkout}
+            style={{
+              width: "100%",
+              padding: "10px 0",
+              marginTop: 8,
+              backgroundColor: "rgba(255,69,58,0.15)",
+              color: WOS.red,
+              fontSize: 13,
+              fontWeight: 700,
+              border: `1px solid rgba(255,69,58,0.3)`,
+              borderRadius: 18,
+              cursor: "pointer",
+            }}
+          >
+            End Workout
+          </button>
+        )}
       </div>
     </div>
   );

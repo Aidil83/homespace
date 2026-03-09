@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { WOS, ACCENT_COLORS } from "./watch-constants";
+import { WOS } from "./watch-constants";
 
 // Epley formula: weight × (1 + reps/30)
 function estimatedE1RM(weight: number, reps: number): number {
@@ -19,14 +19,33 @@ function formatElapsed(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export function WatchActiveExercise() {
-  const [weight, setWeight] = useState(DEFAULT_WEIGHT);
+interface WatchActiveExerciseProps {
+  onAction?: () => void;
+  exerciseName?: string;
+  setIndex?: number;
+  totalSets?: number;
+  prevWeight?: number;
+  prevReps?: number;
+  defaultWeight?: number;
+}
+
+export function WatchActiveExercise({
+  onAction,
+  exerciseName = "Squats",
+  setIndex = 0,
+  totalSets = 2,
+  prevWeight = 130,
+  prevReps = 8,
+  defaultWeight = DEFAULT_WEIGHT,
+}: WatchActiveExerciseProps = {}) {
+  const [weight, setWeight] = useState(defaultWeight);
   const [reps, setReps] = useState(DEFAULT_REPS);
   const [elapsed, setElapsed] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const accent = ACCENT_COLORS[0]; // Squats color
   const e1rm = estimatedE1RM(weight, reps);
-  const isDefault = weight === DEFAULT_WEIGHT && reps === DEFAULT_REPS;
+  const prev1rm = estimatedE1RM(prevWeight, prevReps);
+  const isPR = e1rm > prev1rm && e1rm > 0;
+  const isDefault = weight === defaultWeight && reps === DEFAULT_REPS;
 
   useEffect(() => {
     intervalRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
@@ -44,31 +63,48 @@ export function WatchActiveExercise() {
         fontFamily: "var(--font-geist-sans), system-ui, sans-serif",
       }}
     >
-      {/* Elapsed stopwatch */}
+      {/* Stopwatch + Heart rate */}
       <div
         style={{
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
-          gap: 4,
+          gap: 12,
           marginBottom: 6,
         }}
       >
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={WOS.green} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="13" r="9" />
-          <polyline points="12 9 12 13 15 13" />
-          <line x1="12" y1="1" x2="12" y2="3" />
-        </svg>
-        <span
-          style={{
-            fontSize: 12,
-            fontWeight: 600,
-            color: WOS.green,
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {formatElapsed(elapsed)}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={WOS.green} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="13" r="9" />
+            <polyline points="12 9 12 13 15 13" />
+            <line x1="12" y1="1" x2="12" y2="3" />
+          </svg>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: WOS.green,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {formatElapsed(elapsed)}
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill={WOS.red} stroke="none">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+          </svg>
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: WOS.red,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {142 + (elapsed % 8)}
+          </span>
+        </div>
       </div>
 
       {/* Exercise name + set */}
@@ -80,18 +116,18 @@ export function WatchActiveExercise() {
             color: WOS.label,
           }}
         >
-          Squats
+          {exerciseName}
         </div>
         {/* Set progress dots */}
         <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 6 }}>
-          {[0, 1].map((i) => (
+          {Array.from({ length: totalSets }, (_, i) => (
             <div
               key={i}
               style={{
                 width: 8,
                 height: 8,
                 borderRadius: 4,
-                backgroundColor: i === 0 ? accent : WOS.grayMid,
+                backgroundColor: i <= setIndex ? WOS.green : WOS.grayMid,
               }}
             />
           ))}
@@ -103,7 +139,7 @@ export function WatchActiveExercise() {
             marginTop: 4,
           }}
         >
-          Set 1 / 2
+          Set {setIndex + 1} / {totalSets}
         </div>
       </div>
 
@@ -203,17 +239,29 @@ export function WatchActiveExercise() {
         </button>
       </div>
 
-      {/* Estimated 1RM */}
-      <div
-        style={{
-          fontSize: 14,
-          fontWeight: 700,
-          color: WOS.orange,
-          textAlign: "center",
-          marginTop: 10,
-        }}
-      >
-        1RM: {e1rm} lbs
+      {/* Estimated 1RM + PR badge */}
+      <div style={{ textAlign: "center", marginTop: 14 }}>
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 700,
+            color: isPR ? "#eab308" : WOS.orange,
+          }}
+        >
+          {isPR && "🏆 "}1RM: {e1rm} lbs{isPR && " PR!"}
+        </div>
+        {isPR && (
+          <div
+            style={{
+              fontSize: 10,
+              color: "#eab308",
+              marginTop: 2,
+              animation: "prPulse 1s ease-in-out infinite",
+            }}
+          >
+            +{e1rm - prev1rm} lbs over previous
+          </div>
+        )}
       </div>
 
       {/* Previous reference */}
@@ -222,7 +270,7 @@ export function WatchActiveExercise() {
           display: "flex",
           justifyContent: "center",
           gap: 6,
-          marginTop: 4,
+          marginTop: 8,
         }}
       >
         <span
@@ -235,14 +283,14 @@ export function WatchActiveExercise() {
             borderRadius: 10,
           }}
         >
-          130 lbs × 8 reps
+          {prevWeight} lbs × {prevReps} reps
         </span>
       </div>
 
       {/* Reset button */}
       {!isDefault && (
         <button
-          onClick={() => { setWeight(DEFAULT_WEIGHT); setReps(DEFAULT_REPS); }}
+          onClick={() => { setWeight(defaultWeight); setReps(DEFAULT_REPS); }}
           style={{
             margin: "8px auto 0",
             padding: "5px 14px",
@@ -261,11 +309,13 @@ export function WatchActiveExercise() {
 
       {/* Complete set button */}
       <button
+        onClick={onAction}
         style={{
           width: "100%",
           padding: "12px 0",
-          backgroundColor: accent,
-          color: "#fff",
+          marginTop: 12,
+          backgroundColor: WOS.green,
+          color: "#000",
           fontSize: 15,
           fontWeight: 700,
           border: "none",
@@ -276,6 +326,14 @@ export function WatchActiveExercise() {
       >
         Complete Set
       </button>
+
+      {/* Keyframes */}
+      <style>{`
+        @keyframes prPulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
     </div>
   );
 }

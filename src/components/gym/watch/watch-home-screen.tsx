@@ -2,7 +2,7 @@
 
 import { WOS, SAMPLE_STREAK } from "./watch-constants";
 
-export function WatchHomeScreen() {
+export function WatchHomeScreen({ onAction }: { onAction?: () => void } = {}) {
   return (
     <div
       style={{
@@ -114,6 +114,7 @@ export function WatchHomeScreen() {
 
       {/* Start button */}
       <button
+        onClick={onAction}
         style={{
           width: "100%",
           padding: "14px 0",

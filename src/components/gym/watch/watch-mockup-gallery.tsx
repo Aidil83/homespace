@@ -1,6 +1,7 @@
 "use client";
 
 import { WatchFrame } from "./watch-frame";
+import { WatchInteractiveDemo } from "./watch-interactive-demo";
 import { WatchHomeScreen } from "./watch-home-screen";
 import { WatchExerciseList } from "./watch-exercise-list";
 import { WatchActiveExercise } from "./watch-active-exercise";
@@ -49,6 +50,19 @@ export function WatchMockupGallery() {
         >
           Interactive mockups · 45mm · watchOS
         </p>
+      </div>
+
+      {/* Interactive Demo */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          marginBottom: 48,
+          paddingBottom: 48,
+          borderBottom: "1px solid #27272a",
+        }}
+      >
+        <WatchInteractiveDemo />
       </div>
 
       {/* Grid */}

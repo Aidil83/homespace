@@ -6,10 +6,12 @@ import { WOS, SAMPLE_STREAK, SAMPLE_DURATION } from "./watch-constants";
 const SAMPLE_PRS = 1; // number of PRs hit this session (0 = none)
 const SAMPLE_AVG_1RM_CHANGE = "+3.2%"; // fallback when no PRs
 
-export function WatchWorkoutSummary() {
+export function WatchWorkoutSummary({ onAction }: { onAction?: () => void } = {}) {
   return (
     <div
       style={{
+        position: "relative",
+        overflow: "hidden",
         flex: 1,
         display: "flex",
         flexDirection: "column",
@@ -88,6 +90,7 @@ export function WatchWorkoutSummary() {
 
       {/* Done button */}
       <button
+        onClick={onAction}
         style={{
           width: "100%",
           padding: "12px 0",
@@ -104,12 +107,34 @@ export function WatchWorkoutSummary() {
         Done
       </button>
 
-      {/* Keyframes for bounce animation */}
+      {/* Confetti particles */}
+      {Array.from({ length: 12 }, (_, i) => (
+        <div
+          key={i}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: `${10 + (i * 7) % 80}%`,
+            width: i % 3 === 0 ? 6 : 4,
+            height: i % 3 === 0 ? 6 : 4,
+            borderRadius: i % 2 === 0 ? "50%" : 1,
+            backgroundColor: ["#30d158", "#eab308", "#ff453a", "#0a84ff", "#ff9f0a", "#bf5af2"][i % 6],
+            animation: `confettiFall ${1.5 + (i % 4) * 0.3}s ease-out ${i * 0.1}s forwards`,
+            opacity: 0,
+          }}
+        />
+      ))}
+
+      {/* Keyframes */}
       <style>{`
         @keyframes watchBounce {
           0% { transform: scale(0); opacity: 0; }
           60% { transform: scale(1.15); }
           100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes confettiFall {
+          0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+          100% { transform: translateY(350px) rotate(${720}deg); opacity: 0; }
         }
       `}</style>
     </div>
