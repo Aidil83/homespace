@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { FileText } from "lucide-react";
 import {
@@ -22,6 +22,7 @@ interface Page {
 export function SearchDialog() {
   const [open, setOpen] = useState(false);
   const [pages, setPages] = useState<Page[]>([]);
+  const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
   const router = useRouter();
 
   // Cmd+K / Ctrl+K to toggle
@@ -73,6 +74,8 @@ export function SearchDialog() {
     },
     [router]
   );
+
+  if (!mounted) return null;
 
   return (
     <CommandDialog
