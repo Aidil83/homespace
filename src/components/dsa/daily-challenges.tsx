@@ -41,6 +41,30 @@ function hashDay(day: number, poolSize: number): number {
   return Math.abs(h) % poolSize;
 }
 
+// Shared daily problems endpoint (synced between users)
+const SHARED_DAILY_URL = "https://mgymlcatbtelmsmzxjnl.supabase.co/rest/v1/daily_problems";
+const SHARED_DAILY_KEY = "sb_publishable_MMvk0Glh9zo1SrG-Spn-Hg_pxv7VsxV";
+
+interface SharedDailyRow {
+  leetcode_number: number;
+  name: string;
+  difficulty: string;
+  url: string;
+  topic: string;
+}
+
+function sharedRowToProblem(row: SharedDailyRow): DailyProblem {
+  const slug = row.url.replace(/.*\/problems\//, "").replace(/\/$/, "");
+  return {
+    id: slug,
+    name: row.name,
+    number: row.leetcode_number,
+    difficulty: row.difficulty as DailyProblem["difficulty"],
+    url: row.url,
+    topic: row.topic,
+  };
+}
+
 const TIME_LIMIT: Record<string, number> = {
   easy: 20 * 60,
   medium: 40 * 60,
@@ -210,9 +234,27 @@ interface CompletionMap {
 
 export function DailyChallenges() {
   const dayOfYear = getDayOfYear();
-  const easyPick = EASY_POOL.length > 0 ? EASY_POOL[hashDay(dayOfYear, EASY_POOL.length)] : null;
-  const medPick = MED_POOL.length > 0 ? MED_POOL[hashDay(dayOfYear, MED_POOL.length)] : null;
+  const fallbackEasy = EASY_POOL.length > 0 ? EASY_POOL[hashDay(dayOfYear, EASY_POOL.length)] : null;
+  const fallbackMed = MED_POOL.length > 0 ? MED_POOL[hashDay(dayOfYear, MED_POOL.length)] : null;
+  const [easyPick, setEasyPick] = useState<DailyProblem | null>(fallbackEasy);
+  const [medPick, setMedPick] = useState<DailyProblem | null>(fallbackMed);
   const [completions, setCompletions] = useState<CompletionMap>({});
+
+  // Fetch shared daily problems from Supabase
+  useEffect(() => {
+    const today = new Date().toISOString().split("T")[0];
+    fetch(`${SHARED_DAILY_URL}?date=eq.${today}&select=*`, {
+      headers: { apikey: SHARED_DAILY_KEY },
+    })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: SharedDailyRow[]) => {
+        const easy = rows.find((r) => r.difficulty === "Easy");
+        const med = rows.find((r) => r.difficulty === "Medium");
+        if (easy) setEasyPick(sharedRowToProblem(easy));
+        if (med) setMedPick(sharedRowToProblem(med));
+      })
+      .catch(() => {}); // fallback to hash-based picks
+  }, []);
 
   useEffect(() => {
     fetch("/api/dsa/daily-challenge")
