@@ -147,7 +147,7 @@ export function WatchRestTimer({ onAction, nextExercise }: { onAction?: () => vo
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
         {remaining > 0 && (
           <button
-            onClick={() => adjustTime(-15)}
+            onClick={() => adjustTime(-60)}
             style={{
               width: 36,
               height: 36,
@@ -163,7 +163,7 @@ export function WatchRestTimer({ onAction, nextExercise }: { onAction?: () => vo
               justifyContent: "center",
             }}
           >
-            −15
+            −1m
           </button>
         )}
         <button
@@ -183,7 +183,7 @@ export function WatchRestTimer({ onAction, nextExercise }: { onAction?: () => vo
         </button>
         {remaining > 0 && (
           <button
-            onClick={() => adjustTime(15)}
+            onClick={() => adjustTime(60)}
             style={{
               width: 36,
               height: 36,
@@ -199,7 +199,7 @@ export function WatchRestTimer({ onAction, nextExercise }: { onAction?: () => vo
               justifyContent: "center",
             }}
           >
-            +15
+            +1m
           </button>
         )}
       </div>
