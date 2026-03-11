@@ -53,6 +53,7 @@ struct ExerciseListView: View {
 
                 // End Workout
                 Button {
+                    Haptic.stop()
                     manager.endWorkout()
                 } label: {
                     Text("End Workout")

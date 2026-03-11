@@ -10,6 +10,9 @@ struct RestTimerView: View {
     @State private var running: Bool = true
     @State private var timer: Timer?
 
+    // Digital Crown — cumulative adjustment in seconds
+    @State private var crownAdjustment: Double = 0
+
     private var progress: Double {
         guard totalTime > 0 else { return 0 }
         return Double(remaining) / Double(totalTime)
@@ -61,6 +64,7 @@ struct RestTimerView: View {
                 if remaining > 0 {
                     Button {
                         adjustTime(-60)
+                        Haptic.directionDown()
                     } label: {
                         Text("−1m")
                             .font(.system(size: 11, weight: .bold))
@@ -92,6 +96,7 @@ struct RestTimerView: View {
                 if remaining > 0 {
                     Button {
                         adjustTime(60)
+                        Haptic.directionUp()
                     } label: {
                         Text("+1m")
                             .font(.system(size: 11, weight: .bold))
@@ -109,8 +114,25 @@ struct RestTimerView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(GymColors.tertiaryLabel)
         }
+        .focusable(true)
+        .digitalCrownRotation(
+            $crownAdjustment,
+            from: -90.0,
+            through: 210.0,
+            by: 15.0,
+            sensitivity: .low,
+            isContinuous: false,
+            isHapticFeedbackEnabled: true
+        )
+        .onChange(of: crownAdjustment) { oldValue, newValue in
+            let delta = Int(newValue) - Int(oldValue)
+            if delta != 0 {
+                adjustTime(delta)
+            }
+        }
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
+            crownAdjustment = 0
             startTimer()
         }
         .onDisappear {
@@ -127,7 +149,7 @@ struct RestTimerView: View {
                 remaining -= 1
                 if remaining == 0 {
                     running = false
-                    // Auto-transition after brief delay
+                    Haptic.notification()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                         continueWorkout()
                     }
@@ -140,6 +162,7 @@ struct RestTimerView: View {
         timer?.invalidate()
         remaining = 0
         running = false
+        Haptic.tap()
         continueWorkout()
     }
 
@@ -150,6 +173,6 @@ struct RestTimerView: View {
 
     private func adjustTime(_ delta: Int) {
         totalTime = max(15, min(300, totalTime + delta))
-        remaining = max(0, remaining + delta)
+        remaining = max(0, min(totalTime, remaining + delta))
     }
 }

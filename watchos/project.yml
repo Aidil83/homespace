@@ -1,0 +1,25 @@
+name: GymQuestWatch
+options:
+  bundleIdPrefix: com.aidilrozi
+  deploymentTarget:
+    watchOS: "11.0"
+  xcodeVersion: "16.0"
+
+targets:
+  GymQuestWatch Watch App:
+    type: application
+    platform: watchOS
+    sources:
+      - GymQuestWatch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aidilrozi.GymQuestWatch.watchkitapp
+        INFOPLIST_KEY_WKCompanionAppBundleIdentifier: com.aidilrozi.GymQuestWatch
+        PRODUCT_NAME: GymQuestWatch
+        SWIFT_VERSION: "5.9"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: GymQuest
+        INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "Apple Development"

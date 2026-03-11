@@ -38,6 +38,7 @@ struct HomeView: View {
 
                 // Start button
                 Button {
+                    Haptic.start()
                     manager.startWorkout()
                 } label: {
                     Text("Start Workout")

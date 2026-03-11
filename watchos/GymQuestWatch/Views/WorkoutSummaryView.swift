@@ -56,6 +56,7 @@ struct WorkoutSummaryView: View {
 
                 // Done button
                 Button {
+                    Haptic.tap()
                     manager.finishSummary()
                 } label: {
                     Text("Done")
@@ -74,8 +75,13 @@ struct WorkoutSummaryView: View {
         .navigationBarBackButtonHidden(true)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
+            Haptic.success()
             withAnimation {
                 showCheck = true
+            }
+            // Delayed second haptic for celebration
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                Haptic.notification()
             }
         }
     }
