@@ -23,10 +23,10 @@ export const WEEKLY_SCHEDULE: Record<number, WorkoutType> = {
   0: "rest",      // Sunday
   1: "fullbody",  // Monday
   2: "rest",      // Tuesday
-  3: "fullbody",  // Wednesday
-  4: "rest",      // Thursday
-  5: "fullbody",  // Friday
-  6: "rest",      // Saturday
+  3: "rest",      // Wednesday
+  4: "fullbody",  // Thursday
+  5: "rest",      // Friday
+  6: "fullbody",  // Saturday
 };
 
 const WORKOUTS: Record<WorkoutType, WorkoutDay> = {
