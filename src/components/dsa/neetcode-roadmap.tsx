@@ -542,6 +542,7 @@ function ProblemRow({
           "flex-1 truncate hover:text-primary hover:underline transition-colors",
           isCompleted && "line-through"
         )}
+        title={problem.name}
       >
         {problem.name}
         <ExternalLink className="ml-1 inline h-3 w-3 opacity-40" />
