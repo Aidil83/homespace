@@ -24,6 +24,36 @@ export async function GET() {
   return NextResponse.json(result);
 }
 
+export async function DELETE(request: NextRequest) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { problemIds } = await request.json();
+
+  if (!Array.isArray(problemIds) || problemIds.length === 0) {
+    return NextResponse.json({ error: "Missing problemIds" }, { status: 400 });
+  }
+
+  await prisma.neetcodeProgress.updateMany({
+    where: {
+      userId: user.id,
+      problemId: { in: problemIds },
+    },
+    data: {
+      completed: false,
+      elapsedSec: 0,
+    },
+  });
+
+  return NextResponse.json({ reset: problemIds.length });
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const {

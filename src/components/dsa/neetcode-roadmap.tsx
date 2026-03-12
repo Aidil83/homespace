@@ -202,8 +202,8 @@ function useNeetcodeStopwatch(
           : prev.elapsed;
         const next = { ...prev, elapsed: total, running: false, startedAt: null };
         persist(next);
-        // Fire onPause callback directly with elapsed seconds
-        onPauseRef.current?.(total);
+        // Defer onPause to avoid setState-during-render
+        queueMicrotask(() => onPauseRef.current?.(total));
         return next;
       } else {
         const next = { ...prev, running: true, startedAt: Date.now() };
@@ -305,6 +305,33 @@ export function NeetcodeRoadmap() {
     [progress]
   );
 
+  const resetTopic = useCallback(
+    async (topic: NeetcodeTopic) => {
+      const problemIds = topic.problems.map((p) => p.id);
+      // Clear local state
+      setProgress((prev) => {
+        const next = { ...prev };
+        for (const id of problemIds) {
+          if (next[id]) {
+            next[id] = { elapsedSec: 0, completed: false };
+          }
+        }
+        return next;
+      });
+      // Clear localStorage stopwatch states
+      for (const id of problemIds) {
+        localStorage.removeItem(swKey(id));
+      }
+      // Persist to DB
+      await fetch("/api/dsa/neetcode-progress", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ problemIds }),
+      });
+    },
+    []
+  );
+
   const totalCompleted = Object.values(progress).filter((p) => p.completed).length;
 
   return (
@@ -339,6 +366,7 @@ export function NeetcodeRoadmap() {
             loaded={loaded}
             onSaveProgress={saveProgress}
             onToggleCompleted={toggleCompleted}
+            onResetTopic={resetTopic}
           />
         ))}
       </div>
@@ -353,32 +381,65 @@ interface TopicCardProps {
   loaded: boolean;
   onSaveProgress: (problemId: string, elapsedSec: number, completed?: boolean) => Promise<void>;
   onToggleCompleted: (problemId: string, elapsedSec: number) => Promise<void>;
+  onResetTopic: (topic: NeetcodeTopic) => Promise<void>;
 }
 
-function TopicCard({ topic, progress, loaded, onSaveProgress, onToggleCompleted }: TopicCardProps) {
+function TopicCard({ topic, progress, loaded, onSaveProgress, onToggleCompleted, onResetTopic }: TopicCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const completedCount = topic.problems.filter(
     (p) => progress[p.id]?.completed
   ).length;
 
   return (
     <div className="rounded-lg border bg-card p-4">
-      <button
-        onClick={() => setExpanded((e) => !e)}
-        className="flex w-full items-center justify-between text-left"
-      >
-        <div className="flex items-center gap-2">
+      <div className="flex w-full items-center justify-between">
+        <button
+          onClick={() => setExpanded((e) => !e)}
+          className="flex flex-1 items-center gap-2 text-left"
+        >
           {expanded ? (
             <ChevronDown className="h-4 w-4 text-muted-foreground" />
           ) : (
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           )}
           <h3 className="font-semibold text-sm">{topic.name}</h3>
+        </button>
+        <div className="flex items-center gap-2">
+          {completedCount > 0 && expanded && (
+            confirmReset ? (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    onResetTopic(topic);
+                    setConfirmReset(false);
+                  }}
+                  className="rounded px-1.5 py-0.5 text-[11px] font-medium text-red-400 hover:bg-red-600/20 transition-colors"
+                >
+                  Confirm
+                </button>
+                <button
+                  onClick={() => setConfirmReset(false)}
+                  className="rounded px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground hover:bg-muted transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmReset(true)}
+                className="rounded p-0.5 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                title={`Reset all ${topic.name} progress`}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </button>
+            )
+          )}
+          <span className="text-xs text-muted-foreground">
+            {completedCount}/{topic.problems.length}
+          </span>
         </div>
-        <span className="text-xs text-muted-foreground">
-          {completedCount}/{topic.problems.length}
-        </span>
-      </button>
+      </div>
 
       {/* Progress bar */}
       <div className="mt-2 mb-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
@@ -444,7 +505,7 @@ function ProblemRow({
 
   const handleReset = useCallback(() => {
     sw.reset();
-    onSaveProgress(problem.id, 0);
+    onSaveProgress(problem.id, 0, false);
   }, [sw, problem.id, onSaveProgress]);
 
   const handleToggleDone = useCallback(() => {
