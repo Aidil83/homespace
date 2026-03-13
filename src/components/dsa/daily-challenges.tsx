@@ -3,10 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { DifficultyBadge } from "./difficulty-badge";
-import {
-  DAILY_PROBLEM_POOL,
-  type DailyProblem,
-} from "@/data/daily-problems";
+import { type DailyProblem } from "@/data/daily-problems";
 import {
   Code,
   CheckCircle,
@@ -21,25 +18,12 @@ import {
   Clock,
 } from "lucide-react";
 import {
-  getDayOfYear,
   formatTime,
   type StopwatchState,
   loadState,
   saveState,
   computeLiveElapsed,
 } from "@/lib/stopwatch";
-
-// Filter pools (done once, outside component)
-const EASY_POOL = DAILY_PROBLEM_POOL.filter((p) => p.difficulty === "Easy");
-const MED_POOL = DAILY_PROBLEM_POOL.filter((p) => p.difficulty === "Medium");
-
-// Knuth multiplicative hash to scatter daily picks across the pool
-function hashDay(day: number, poolSize: number): number {
-  let h = day * 2654435761;
-  h = ((h >>> 16) ^ h) * 0x45d9f3b;
-  h = ((h >>> 16) ^ h);
-  return Math.abs(h) % poolSize;
-}
 
 // Shared daily problems endpoint (synced between users)
 const SHARED_DAILY_URL = "https://mgymlcatbtelmsmzxjnl.supabase.co/rest/v1/daily_problems";
@@ -232,28 +216,30 @@ interface CompletionMap {
   [difficulty: string]: { problemId: string; elapsedSec: number };
 }
 
+const DIFFICULTY_CONFIG: Record<string, { label: string; subtitle: string; icon: React.ReactNode; accentColor: "green" | "purple" | "red" }> = {
+  Easy: { label: "Easy Warmup", subtitle: "Daily warmup challenge", icon: <Zap className="h-4 w-4 text-green-400" />, accentColor: "green" },
+  Medium: { label: "Medium Grind", subtitle: "Push your limits", icon: <Flame className="h-4 w-4 text-purple-400" />, accentColor: "purple" },
+  Hard: { label: "Hard Challenge", subtitle: "Test your mastery", icon: <Flame className="h-4 w-4 text-red-400" />, accentColor: "red" },
+};
+
 export function DailyChallenges() {
-  const dayOfYear = getDayOfYear();
-  const fallbackEasy = EASY_POOL.length > 0 ? EASY_POOL[hashDay(dayOfYear, EASY_POOL.length)] : null;
-  const fallbackMed = MED_POOL.length > 0 ? MED_POOL[hashDay(dayOfYear, MED_POOL.length)] : null;
-  const [easyPick, setEasyPick] = useState<DailyProblem | null>(fallbackEasy);
-  const [medPick, setMedPick] = useState<DailyProblem | null>(fallbackMed);
+  const [problems, setProblems] = useState<DailyProblem[]>([]);
   const [completions, setCompletions] = useState<CompletionMap>({});
 
-  // Fetch shared daily problems from Supabase
+  // Fetch daily problems from Supabase
   useEffect(() => {
-    const today = new Date().toISOString().split("T")[0];
+    const now = new Date();
+    const today = now.toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
     fetch(`${SHARED_DAILY_URL}?date=eq.${today}&select=*`, {
       headers: { apikey: SHARED_DAILY_KEY },
     })
       .then((r) => (r.ok ? r.json() : []))
       .then((rows: SharedDailyRow[]) => {
-        const easy = rows.find((r) => r.difficulty === "Easy");
-        const med = rows.find((r) => r.difficulty === "Medium");
-        if (easy) setEasyPick(sharedRowToProblem(easy));
-        if (med) setMedPick(sharedRowToProblem(med));
+        if (rows.length > 0) {
+          setProblems(rows.map(sharedRowToProblem));
+        }
       })
-      .catch(() => {}); // fallback to hash-based picks
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -285,36 +271,28 @@ export function DailyChallenges() {
     });
   }, []);
 
-  if (!easyPick && !medPick) return null;
+  if (problems.length === 0) return null;
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      {easyPick && (
-        <ChallengeCard
-          label="Easy Warmup"
-          subtitle="Daily warmup challenge"
-          icon={<Zap className="h-4 w-4 text-green-400" />}
-          accentColor="green"
-          problem={easyPick}
-          difficulty="easy"
-          done={!!completions.easy}
-          onMarkDone={markDone}
-          onUnmarkDone={unmarkDone}
-        />
-      )}
-      {medPick && (
-        <ChallengeCard
-          label="Medium Grind"
-          subtitle="Push your limits"
-          icon={<Flame className="h-4 w-4 text-purple-400" />}
-          accentColor="purple"
-          problem={medPick}
-          difficulty="medium"
-          done={!!completions.medium}
-          onMarkDone={markDone}
-          onUnmarkDone={unmarkDone}
-        />
-      )}
+      {problems.map((problem, i) => {
+        const config = DIFFICULTY_CONFIG[problem.difficulty] ?? DIFFICULTY_CONFIG.Easy;
+        const key = `${problem.difficulty.toLowerCase()}-${i}`;
+        return (
+          <ChallengeCard
+            key={key}
+            label={config.label}
+            subtitle={config.subtitle}
+            icon={config.icon}
+            accentColor={config.accentColor === "red" ? "purple" : config.accentColor}
+            problem={problem}
+            difficulty={key}
+            done={!!completions[key]}
+            onMarkDone={markDone}
+            onUnmarkDone={unmarkDone}
+          />
+        );
+      })}
     </div>
   );
 }
