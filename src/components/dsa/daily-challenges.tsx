@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { DifficultyBadge } from "./difficulty-badge";
-import { type DailyProblem } from "@/data/daily-problems";
+import {
+  DAILY_PROBLEM_POOL,
+  type DailyProblem,
+} from "@/data/daily-problems";
 import {
   Code,
   CheckCircle,
@@ -18,12 +21,25 @@ import {
   Clock,
 } from "lucide-react";
 import {
+  getDayOfYear,
   formatTime,
   type StopwatchState,
   loadState,
   saveState,
   computeLiveElapsed,
 } from "@/lib/stopwatch";
+
+// Filter pools (done once, outside component)
+const EASY_POOL = DAILY_PROBLEM_POOL.filter((p) => p.difficulty === "Easy");
+const MED_POOL = DAILY_PROBLEM_POOL.filter((p) => p.difficulty === "Medium");
+
+// Knuth multiplicative hash to scatter daily picks across the pool
+function hashDay(day: number, poolSize: number): number {
+  let h = day * 2654435761;
+  h = ((h >>> 16) ^ h) * 0x45d9f3b;
+  h = ((h >>> 16) ^ h);
+  return Math.abs(h) % poolSize;
+}
 
 // Shared daily problems endpoint (synced between users)
 const SHARED_DAILY_URL = "https://mgymlcatbtelmsmzxjnl.supabase.co/rest/v1/daily_problems";
@@ -226,10 +242,19 @@ export function DailyChallenges() {
   const [problems, setProblems] = useState<DailyProblem[]>([]);
   const [completions, setCompletions] = useState<CompletionMap>({});
 
-  // Fetch daily problems from Supabase
+  // Fetch daily problems from Supabase, fall back to local hash-based picks
   useEffect(() => {
     const now = new Date();
     const today = now.toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+
+    const fallback = () => {
+      const day = getDayOfYear();
+      const picks: DailyProblem[] = [];
+      if (EASY_POOL.length > 0) picks.push(EASY_POOL[hashDay(day, EASY_POOL.length)]);
+      if (MED_POOL.length > 0) picks.push(MED_POOL[hashDay(day, MED_POOL.length)]);
+      setProblems(picks);
+    };
+
     fetch(`${SHARED_DAILY_URL}?date=eq.${today}&select=*`, {
       headers: { apikey: SHARED_DAILY_KEY },
     })
@@ -237,9 +262,11 @@ export function DailyChallenges() {
       .then((rows: SharedDailyRow[]) => {
         if (rows.length > 0) {
           setProblems(rows.map(sharedRowToProblem));
+        } else {
+          fallback();
         }
       })
-      .catch(() => {});
+      .catch(() => fallback());
   }, []);
 
   useEffect(() => {
