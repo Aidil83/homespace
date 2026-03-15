@@ -18,10 +18,29 @@ struct ActiveExerciseView: View {
     @State private var crownField: CrownField = .weight
     @State private var crownValue: Double = 0
 
+    // Suggestion
+    @State private var suggestion: OverloadSuggestion?
+
     private var exercise: Exercise { sampleExercises[exerciseIndex] }
     private var e1rm: Int { E1RMCalculator.estimate(weight: weight, reps: reps) }
-    private var prev1rm: Int { E1RMCalculator.estimate(weight: exercise.prevWeight, reps: exercise.prevReps) }
-    private var isPR: Bool { e1rm > prev1rm && e1rm > 0 }
+
+    private var bestPreviousE1RM: Int {
+        let historical = manager.bestHistoricalE1RM(for: exercise.id)
+        if historical > 0 { return historical }
+        return E1RMCalculator.estimate(weight: exercise.prevWeight, reps: exercise.prevReps)
+    }
+
+    private var isPR: Bool { e1rm > bestPreviousE1RM && e1rm > 0 }
+
+    private var suggestionColor: Color {
+        switch suggestion?.type {
+        case .levelUp:   return GymColors.green
+        case .maintain:  return GymColors.orange
+        case .deload:    return GymColors.red
+        case .firstTime: return GymColors.blue
+        case .none:      return GymColors.tertiaryLabel
+        }
+    }
 
     private var elapsedStr: String {
         let m = elapsed / 60
@@ -79,7 +98,7 @@ struct ActiveExerciseView: View {
                 onTap: { switchCrown(to: .reps) }
             )
 
-            // 1RM + previous ref
+            // 1RM + suggestion hint
             HStack(spacing: 0) {
                 if isPR {
                     Text("🏆 ")
@@ -88,9 +107,15 @@ struct ActiveExerciseView: View {
                 Text("1RM: \(e1rm)")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(isPR ? GymColors.gold : GymColors.orange)
-                Text("  prev \(exercise.prevWeight)×\(exercise.prevReps)")
-                    .font(.system(size: 10))
-                    .foregroundStyle(GymColors.tertiaryLabel)
+                if let suggestion {
+                    Text("  \(suggestion.label)")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(suggestionColor)
+                } else {
+                    Text("  prev \(bestPreviousE1RM)")
+                        .font(.system(size: 10))
+                        .foregroundStyle(GymColors.tertiaryLabel)
+                }
             }
             .padding(.top, 2)
 
@@ -137,11 +162,15 @@ struct ActiveExerciseView: View {
         .navigationTitle(exercise.name)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            weight = exercise.weight
-            reps = 8
+            // Load suggestion and pre-fill from it
+            let s = manager.suggestions[exerciseIndex]
+            suggestion = s
+            weight = s?.weight ?? exercise.weight
+            reps = s?.targetReps ?? 8
+
             elapsed = 0
             crownField = .weight
-            crownValue = Double(exercise.weight)
+            crownValue = Double(weight)
             timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
                 elapsed += 1
             }

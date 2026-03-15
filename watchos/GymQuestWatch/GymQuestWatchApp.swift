@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 @main
 struct GymQuestWatchApp: App {
@@ -6,5 +7,6 @@ struct GymQuestWatchApp: App {
         WindowGroup {
             ContentView()
         }
+        .modelContainer(for: [WorkoutSession.self, ExerciseSetRecord.self])
     }
 }

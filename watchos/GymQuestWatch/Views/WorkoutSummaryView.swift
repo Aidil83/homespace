@@ -3,7 +3,6 @@ import SwiftUI
 struct WorkoutSummaryView: View {
     @Environment(WorkoutManager.self) private var manager
     @State private var showCheck = false
-    @State private var showConfetti = false
 
     var body: some View {
         ScrollView {
@@ -25,32 +24,38 @@ struct WorkoutSummaryView: View {
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(GymColors.label)
 
-                // PR callout
-                HStack(spacing: 6) {
-                    Text("🏆")
-                        .font(.system(size: 14))
-                    Text("New PR! Squats 1RM: 171 lbs")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(GymColors.gold)
+                // PR callouts (dynamic from session data)
+                ForEach(manager.sessionPRs) { pr in
+                    HStack(spacing: 6) {
+                        Text("🏆")
+                            .font(.system(size: 14))
+                        Text("New PR! \(pr.exerciseName) 1RM: \(pr.e1rm) lbs")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(GymColors.gold)
+                    }
+                    .padding(.vertical, 5)
+                    .padding(.horizontal, 14)
+                    .background(GymColors.gold.opacity(0.12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(GymColors.gold.opacity(0.25), lineWidth: 1)
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
-                .padding(.vertical, 5)
-                .padding(.horizontal, 14)
-                .background(GymColors.gold.opacity(0.12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(GymColors.gold.opacity(0.25), lineWidth: 1)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 14))
 
                 // Stats grid
                 LazyVGrid(columns: [
                     GridItem(.flexible()),
                     GridItem(.flexible())
                 ], spacing: 12) {
-                    StatItemView(label: "PRs Hit", value: "1 🏆", highlight: true)
+                    StatItemView(
+                        label: "PRs Hit",
+                        value: manager.sessionPRs.isEmpty ? "0" : "\(manager.sessionPRs.count) 🏆",
+                        highlight: !manager.sessionPRs.isEmpty
+                    )
                     StatItemView(label: "Exercises", value: "\(manager.completedExercises.count)/8")
                     StatItemView(label: "Duration", value: manager.formattedDuration)
-                    StatItemView(label: "Streak", value: "12 days 🔥")
+                    StatItemView(label: "Streak", value: "\(max(1, manager.currentStreak + 1))d")
                 }
                 .padding(.top, 8)
 

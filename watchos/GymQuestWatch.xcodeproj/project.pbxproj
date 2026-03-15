@@ -25,6 +25,9 @@
 		DD10D88ED0913684391C4CF3 /* Exercise.swift in Sources */ = {isa = PBXBuildFile; fileRef = 804C1FD65E940D9F74B65D3C /* Exercise.swift */; };
 		DEA2F0E4932F011E6BE6DD0C /* ActiveExerciseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A22CD01B339BC649D052191 /* ActiveExerciseView.swift */; };
 		FEB8D8A1C02D3E5388606B9B /* HapticManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C914DED9DA5662C8519530D /* HapticManager.swift */; };
+		AA1B2C3D4E5F6A7B8C9D0E1F /* WorkoutLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1C2D3E4F5A6B7C8D9E0F1A /* WorkoutLog.swift */; };
+		CC2D3E4F5A6B7C8D9E0F1A2B /* OverloadEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD3E4F5A6B7C8D9E0F1A2B3C /* OverloadEngine.swift */; };
+		EE4F5A6B7C8D9E0F1A2B3C4D /* SuggestionBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF5A6B7C8D9E0F1A2B3C4D5E /* SuggestionBadge.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -47,6 +50,9 @@
 		D4884B50049526B0A5CEEFB0 /* StatItemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatItemView.swift; sourceTree = "<group>"; };
 		E7BB68B5FA0CEE6535C126D0 /* WorkoutSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutSummaryView.swift; sourceTree = "<group>"; };
 		E8565CFB93BD5AD6F6AB8F01 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		BB1C2D3E4F5A6B7C8D9E0F1A /* WorkoutLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutLog.swift; sourceTree = "<group>"; };
+		DD3E4F5A6B7C8D9E0F1A2B3C /* OverloadEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverloadEngine.swift; sourceTree = "<group>"; };
+		FF5A6B7C8D9E0F1A2B3C4D5E /* SuggestionBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionBadge.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -66,6 +72,7 @@
 			isa = PBXGroup;
 			children = (
 				804C1FD65E940D9F74B65D3C /* Exercise.swift */,
+				BB1C2D3E4F5A6B7C8D9E0F1A /* WorkoutLog.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -102,6 +109,7 @@
 				16FD503657B6EB3354131A54 /* SetDotsView.swift */,
 				D4884B50049526B0A5CEEFB0 /* StatItemView.swift */,
 				BFE02F66DA3BD51225F9A016 /* StepperControl.swift */,
+				FF5A6B7C8D9E0F1A2B3C4D5E /* SuggestionBadge.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -120,6 +128,7 @@
 				A27EBC6DE18FC8F43B734C89 /* AccentColors.swift */,
 				B660E27998BD0C5CEE7EAC75 /* E1RMCalculator.swift */,
 				1C914DED9DA5662C8519530D /* HapticManager.swift */,
+				DD3E4F5A6B7C8D9E0F1A2B3C /* OverloadEngine.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -215,6 +224,9 @@
 				6B47105E458E19C7AB9668D9 /* StepperControl.swift in Sources */,
 				4B699B8719F6FACDA1281115 /* WorkoutManager.swift in Sources */,
 				34BB0384893600E79A0B1ADC /* WorkoutSummaryView.swift in Sources */,
+				AA1B2C3D4E5F6A7B8C9D0E1F /* WorkoutLog.swift in Sources */,
+				CC2D3E4F5A6B7C8D9E0F1A2B /* OverloadEngine.swift in Sources */,
+				EE4F5A6B7C8D9E0F1A2B3C4D /* SuggestionBadge.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

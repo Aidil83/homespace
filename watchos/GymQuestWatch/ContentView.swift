@@ -1,7 +1,9 @@
 import SwiftUI
+import SwiftData
 
 struct ContentView: View {
     @State private var manager = WorkoutManager()
+    @Environment(\.modelContext) private var modelContext
 
     var body: some View {
         NavigationStack(path: $manager.path) {
@@ -22,5 +24,9 @@ struct ContentView: View {
                 }
         }
         .environment(manager)
+        .onAppear {
+            manager.modelContext = modelContext
+            manager.refreshStreak()
+        }
     }
 }
