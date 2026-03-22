@@ -124,6 +124,9 @@ export async function POST(request: NextRequest) {
         notes: notes ?? undefined,
       },
     });
+    await prisma.neetcodeAttempt.create({
+      data: { userId: user.id, problemId, elapsedSec: elapsedSec ?? 0, rating: null },
+    });
     return NextResponse.json(progress);
   }
 
@@ -172,6 +175,9 @@ export async function POST(request: NextRequest) {
         notes: notes ?? undefined,
       },
     });
+    await prisma.neetcodeAttempt.create({
+      data: { userId: user.id, problemId, elapsedSec: elapsedSec ?? 0, rating },
+    });
 
     return NextResponse.json(progress);
   }
@@ -190,6 +196,13 @@ export async function POST(request: NextRequest) {
       completed: completed ?? false,
     },
   });
+
+  // Log attempt when marking complete without rating
+  if (completed) {
+    await prisma.neetcodeAttempt.create({
+      data: { userId: user.id, problemId, elapsedSec: elapsedSec ?? 0, rating: null },
+    });
+  }
 
   return NextResponse.json(progress);
 }

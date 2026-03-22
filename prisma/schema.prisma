@@ -185,6 +185,18 @@ model NeetcodeProgress {
   @@map("neetcode_progress")
 }
 
+model NeetcodeAttempt {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  problemId  String   @map("problem_id")
+  elapsedSec Int      @default(0) @map("elapsed_sec")
+  rating     Int?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId, problemId])
+  @@map("neetcode_attempts")
+}
+
 // ========================================
 // Focus Sessions & Biome Progression
 // ========================================

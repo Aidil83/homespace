@@ -3,14 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { DifficultyBadge } from "./difficulty-badge";
-import { ReviewDialog } from "./review-dialog";
+import { ProblemHubDialog } from "./problem-hub-dialog";
 import {
   NEETCODE_TOPICS,
   type NeetcodeProblem,
   type NeetcodeTopic,
 } from "@/data/neetcode-150";
 import {
-  ExternalLink,
   Play,
   Pause,
   RotateCcw,
@@ -385,17 +384,21 @@ export function NeetcodeRoadmap() {
     [progress]
   );
 
-  const unmarkCompleted = useCallback(
+  const submitAttempt = useCallback(
     async (problemId: string, elapsedSec: number) => {
       const existing = progress[problemId] ?? EMPTY_PROGRESS;
       setProgress((prev) => ({
         ...prev,
-        [problemId]: { ...existing, elapsedSec, completed: false },
+        [problemId]: {
+          ...(prev[problemId] ?? EMPTY_PROGRESS),
+          elapsedSec: Math.min(existing.elapsedSec || elapsedSec, elapsedSec) || elapsedSec,
+          completed: true,
+        },
       }));
       await fetch("/api/dsa/neetcode-progress", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ problemId, elapsedSec, completed: false }),
+        body: JSON.stringify({ problemId, elapsedSec, completed: true }),
       });
     },
     [progress]
@@ -463,7 +466,7 @@ export function NeetcodeRoadmap() {
             onSaveProgress={saveProgress}
             onRateAndComplete={rateAndComplete}
             onSkipReview={skipReview}
-            onUnmarkCompleted={unmarkCompleted}
+            onSubmitAttempt={submitAttempt}
             onResetTopic={resetTopic}
           />
         ))}
@@ -480,11 +483,11 @@ interface TopicCardProps {
   onSaveProgress: (problemId: string, elapsedSec: number, completed?: boolean) => Promise<void>;
   onRateAndComplete: (problemId: string, elapsedSec: number, rating: Rating, notes: string) => Promise<void>;
   onSkipReview: (problemId: string, elapsedSec: number, notes: string) => Promise<void>;
-  onUnmarkCompleted: (problemId: string, elapsedSec: number) => Promise<void>;
+  onSubmitAttempt: (problemId: string, elapsedSec: number) => Promise<void>;
   onResetTopic: (topic: NeetcodeTopic) => Promise<void>;
 }
 
-function TopicCard({ topic, progress, loaded, onSaveProgress, onRateAndComplete, onSkipReview, onUnmarkCompleted, onResetTopic }: TopicCardProps) {
+function TopicCard({ topic, progress, loaded, onSaveProgress, onRateAndComplete, onSkipReview, onSubmitAttempt, onResetTopic }: TopicCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const completedCount = topic.problems.filter(
@@ -572,7 +575,7 @@ function TopicCard({ topic, progress, loaded, onSaveProgress, onRateAndComplete,
               onSaveProgress={onSaveProgress}
               onRateAndComplete={onRateAndComplete}
               onSkipReview={onSkipReview}
-              onUnmarkCompleted={onUnmarkCompleted}
+              onSubmitAttempt={onSubmitAttempt}
             />
           ))}
         </div>
@@ -589,7 +592,7 @@ interface ProblemRowProps {
   onSaveProgress: (problemId: string, elapsedSec: number, completed?: boolean) => Promise<void>;
   onRateAndComplete: (problemId: string, elapsedSec: number, rating: Rating, notes: string) => Promise<void>;
   onSkipReview: (problemId: string, elapsedSec: number, notes: string) => Promise<void>;
-  onUnmarkCompleted: (problemId: string, elapsedSec: number) => Promise<void>;
+  onSubmitAttempt: (problemId: string, elapsedSec: number) => Promise<void>;
 }
 
 function ProblemRow({
@@ -599,9 +602,9 @@ function ProblemRow({
   onSaveProgress,
   onRateAndComplete,
   onSkipReview,
-  onUnmarkCompleted,
+  onSubmitAttempt,
 }: ProblemRowProps) {
-  const [showDialog, setShowDialog] = useState(false);
+  const [showHub, setShowHub] = useState(false);
 
   const handlePause = useCallback(
     (elapsedSec: number) => {
@@ -628,18 +631,7 @@ function ProblemRow({
 
   const handleReset = useCallback(() => {
     sw.reset();
-    onSaveProgress(problem.id, 0, false);
-  }, [sw, problem.id, onSaveProgress]);
-
-  const handleCheckClick = useCallback(() => {
-    if (isCompleted) {
-      onUnmarkCompleted(problem.id, sw.elapsed);
-    } else {
-      setShowDialog(true);
-    }
-  }, [isCompleted, onUnmarkCompleted, problem.id, sw.elapsed]);
-
-  const bestTime = sw.elapsed > 0 ? formatTime(sw.elapsed) : null;
+  }, [sw]);
 
   return (
     <div>
@@ -649,49 +641,36 @@ function ProblemRow({
           isCompleted && reviewStatus !== "due" && reviewStatus !== "overdue" && "opacity-60"
         )}
       >
-        {/* Done button with status-aware icon */}
-        <button
-          onClick={handleCheckClick}
+        {/* Read-only status icon */}
+        <span
           className={cn(
-            "shrink-0 rounded p-0.5 transition-colors",
-            !isCompleted && "text-muted-foreground/40 hover:text-muted-foreground",
+            "shrink-0 p-0.5",
+            !isCompleted && "text-muted-foreground/40",
             isCompleted && reviewStatus === "mastered" && "text-green-400",
             isCompleted && reviewStatus === "overdue" && "text-red-400",
             isCompleted && reviewStatus === "due" && "text-orange-400",
             isCompleted && reviewStatus === "scheduled" && "text-green-400",
             isCompleted && reviewStatus === "none" && "text-green-400",
           )}
-          title={
-            isCompleted
-              ? reviewStatus === "due" || reviewStatus === "overdue"
-                ? "Due for review — click to unmark"
-                : reviewStatus === "mastered"
-                  ? "Mastered — click to unmark"
-                  : "Mark incomplete"
-              : "Mark complete"
-          }
         >
           {isCompleted ? (
             <StatusIcon status={reviewStatus} completed={isCompleted} />
           ) : (
             <CheckCircle className="h-4 w-4" />
           )}
-        </button>
+        </span>
 
-        {/* Problem link */}
-        <a
-          href={problem.url}
-          target="_blank"
-          rel="noopener noreferrer"
+        {/* Problem name — opens hub dialog */}
+        <button
+          onClick={() => setShowHub(true)}
           className={cn(
-            "flex-1 truncate hover:text-primary hover:underline transition-colors",
+            "flex-1 truncate text-left hover:text-primary hover:underline transition-colors",
             isCompleted && reviewStatus !== "due" && reviewStatus !== "overdue" && "line-through"
           )}
           title={problem.name}
         >
           {problem.name}
-          <ExternalLink className="ml-1 inline h-3 w-3 opacity-40" />
-        </a>
+        </button>
 
         {/* Difficulty badge */}
         <DifficultyBadge difficulty={problem.difficulty.toLowerCase()} className="shrink-0" />
@@ -742,28 +721,23 @@ function ProblemRow({
         </div>
       </div>
 
-      {/* Review dialog */}
-      {showDialog && (
-        <ReviewDialog
-          problemName={problem.name}
-          difficulty={problem.difficulty.toLowerCase()}
-          attempts={entry.reviewCount + 1}
-          bestTime={bestTime}
-          isFirstSolve={entry.reviewCount === 0}
-          currentIntervalDays={entry.intervalDays}
-          masteryStreak={entry.masteryStreak}
-          notes={entry.notes}
-          onRate={(rating, notes) => {
-            onRateAndComplete(problem.id, sw.elapsed, rating, notes);
-            setShowDialog(false);
-          }}
-          onSkip={(notes) => {
-            onSkipReview(problem.id, sw.elapsed, notes);
-            setShowDialog(false);
-          }}
-          onClose={() => setShowDialog(false)}
-        />
-      )}
+      {/* Problem hub dialog */}
+      <ProblemHubDialog
+        open={showHub}
+        onOpenChange={setShowHub}
+        problem={problem}
+        progressEntry={entry}
+        stopwatch={sw}
+        onRateAndComplete={(rating, notes) => {
+          onRateAndComplete(problem.id, sw.elapsed, rating, notes);
+        }}
+        onSkipReview={(notes) => {
+          onSkipReview(problem.id, sw.elapsed, notes);
+        }}
+        onSubmit={(elapsedSec) => {
+          onSubmitAttempt(problem.id, elapsedSec);
+        }}
+      />
     </div>
   );
 }
