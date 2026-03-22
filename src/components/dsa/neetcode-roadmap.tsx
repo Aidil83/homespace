@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { DifficultyBadge } from "./difficulty-badge";
+import { ReviewDialog } from "./review-dialog";
 import {
   NEETCODE_TOPICS,
   type NeetcodeProblem,
@@ -17,8 +18,16 @@ import {
   CheckCircle,
   ChevronDown,
   ChevronRight,
+  Circle,
+  AlertCircle,
 } from "lucide-react";
 import { formatTime, type StopwatchState, computeLiveElapsed } from "@/lib/stopwatch";
+import {
+  computeNextReview,
+  getReviewStatus,
+  type Rating,
+  type ReviewStatus,
+} from "@/lib/spaced-repetition";
 
 // ── Time limits per difficulty ─────────────────────────────────────
 const TIME_LIMIT: Record<string, number> = {
@@ -252,9 +261,42 @@ function useNeetcodeStopwatch(
 interface ProgressEntry {
   elapsedSec: number;
   completed: boolean;
+  lastRating: number | null;
+  intervalDays: number;
+  reviewCount: number;
+  nextReviewDate: string | null;
+  mastered: boolean;
+  masteryStreak: number;
+  notes: string | null;
 }
 
 type ProgressMap = Record<string, ProgressEntry>;
+
+const EMPTY_PROGRESS: ProgressEntry = {
+  elapsedSec: 0,
+  completed: false,
+  lastRating: null,
+  intervalDays: 0,
+  reviewCount: 0,
+  nextReviewDate: null,
+  mastered: false,
+  masteryStreak: 0,
+  notes: null,
+};
+
+// ── Status icon component ──────────────────────────────────────────
+function StatusIcon({ status }: { status: ReviewStatus; completed: boolean }) {
+  switch (status) {
+    case "mastered":
+      return <CheckCircle className="h-4 w-4 text-green-400 fill-green-400/20" />;
+    case "overdue":
+      return <AlertCircle className="h-4 w-4 text-red-400" />;
+    case "due":
+      return <Circle className="h-4 w-4 text-orange-400" />;
+    default:
+      return <CheckCircle className="h-4 w-4" />;
+  }
+}
 
 // ── Main component ─────────────────────────────────────────────────
 export function NeetcodeRoadmap() {
@@ -274,9 +316,11 @@ export function NeetcodeRoadmap() {
 
   const saveProgress = useCallback(
     async (problemId: string, elapsedSec: number, completed?: boolean) => {
+      const existing = progress[problemId] ?? EMPTY_PROGRESS;
       const entry: ProgressEntry = {
+        ...existing,
         elapsedSec,
-        completed: completed ?? progress[problemId]?.completed ?? false,
+        completed: completed ?? existing.completed,
       };
       setProgress((prev) => ({ ...prev, [problemId]: entry }));
       await fetch("/api/dsa/neetcode-progress", {
@@ -288,18 +332,70 @@ export function NeetcodeRoadmap() {
     [progress]
   );
 
-  const toggleCompleted = useCallback(
-    async (problemId: string, elapsedSec: number) => {
-      const current = progress[problemId]?.completed ?? false;
-      const next = !current;
+  const rateAndComplete = useCallback(
+    async (problemId: string, elapsedSec: number, rating: Rating, notes: string) => {
+      const existing = progress[problemId] ?? EMPTY_PROGRESS;
+      const reviewState = computeNextReview(
+        rating,
+        existing.intervalDays,
+        existing.reviewCount,
+        existing.masteryStreak
+      );
+
       setProgress((prev) => ({
         ...prev,
-        [problemId]: { elapsedSec, completed: next },
+        [problemId]: {
+          ...(prev[problemId] ?? EMPTY_PROGRESS),
+          elapsedSec,
+          completed: true,
+          lastRating: rating,
+          notes: notes || prev[problemId]?.notes || null,
+          ...reviewState,
+        },
+      }));
+
+      await fetch("/api/dsa/neetcode-progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ problemId, elapsedSec, completed: true, rating, notes: notes || undefined }),
+      });
+    },
+    [progress]
+  );
+
+  const skipReview = useCallback(
+    async (problemId: string, elapsedSec: number, notes: string) => {
+      setProgress((prev) => ({
+        ...prev,
+        [problemId]: {
+          ...(prev[problemId] ?? EMPTY_PROGRESS),
+          elapsedSec,
+          completed: true,
+          mastered: true,
+          notes: notes || prev[problemId]?.notes || null,
+        },
+      }));
+
+      await fetch("/api/dsa/neetcode-progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ problemId, elapsedSec, completed: true, skip: true, notes: notes || undefined }),
+      });
+    },
+    [progress]
+  );
+
+  const unmarkCompleted = useCallback(
+    async (problemId: string, elapsedSec: number) => {
+      const existing = progress[problemId] ?? EMPTY_PROGRESS;
+      setProgress((prev) => ({
+        ...prev,
+        [problemId]: { ...existing, elapsedSec, completed: false },
       }));
       await fetch("/api/dsa/neetcode-progress", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ problemId, elapsedSec, completed: next }),
+        body: JSON.stringify({ problemId, elapsedSec, completed: false }),
       });
     },
     [progress]
@@ -313,7 +409,7 @@ export function NeetcodeRoadmap() {
         const next = { ...prev };
         for (const id of problemIds) {
           if (next[id]) {
-            next[id] = { elapsedSec: 0, completed: false };
+            next[id] = { ...EMPTY_PROGRESS };
           }
         }
         return next;
@@ -365,7 +461,9 @@ export function NeetcodeRoadmap() {
             progress={progress}
             loaded={loaded}
             onSaveProgress={saveProgress}
-            onToggleCompleted={toggleCompleted}
+            onRateAndComplete={rateAndComplete}
+            onSkipReview={skipReview}
+            onUnmarkCompleted={unmarkCompleted}
             onResetTopic={resetTopic}
           />
         ))}
@@ -380,16 +478,25 @@ interface TopicCardProps {
   progress: ProgressMap;
   loaded: boolean;
   onSaveProgress: (problemId: string, elapsedSec: number, completed?: boolean) => Promise<void>;
-  onToggleCompleted: (problemId: string, elapsedSec: number) => Promise<void>;
+  onRateAndComplete: (problemId: string, elapsedSec: number, rating: Rating, notes: string) => Promise<void>;
+  onSkipReview: (problemId: string, elapsedSec: number, notes: string) => Promise<void>;
+  onUnmarkCompleted: (problemId: string, elapsedSec: number) => Promise<void>;
   onResetTopic: (topic: NeetcodeTopic) => Promise<void>;
 }
 
-function TopicCard({ topic, progress, loaded, onSaveProgress, onToggleCompleted, onResetTopic }: TopicCardProps) {
+function TopicCard({ topic, progress, loaded, onSaveProgress, onRateAndComplete, onSkipReview, onUnmarkCompleted, onResetTopic }: TopicCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const completedCount = topic.problems.filter(
     (p) => progress[p.id]?.completed
   ).length;
+
+  const dueCount = topic.problems.filter((p) => {
+    const entry = progress[p.id];
+    if (!entry?.completed || entry.mastered) return false;
+    const status = getReviewStatus(entry.nextReviewDate, entry.mastered);
+    return status === "due" || status === "overdue";
+  }).length;
 
   return (
     <div className="rounded-lg border bg-card p-4">
@@ -437,6 +544,9 @@ function TopicCard({ topic, progress, loaded, onSaveProgress, onToggleCompleted,
           )}
           <span className="text-xs text-muted-foreground">
             {completedCount}/{topic.problems.length}
+            {dueCount > 0 && (
+              <span className="ml-1 text-orange-400">({dueCount} due)</span>
+            )}
           </span>
         </div>
       </div>
@@ -460,7 +570,9 @@ function TopicCard({ topic, progress, loaded, onSaveProgress, onToggleCompleted,
               progressEntry={progress[problem.id]}
               loaded={loaded}
               onSaveProgress={onSaveProgress}
-              onToggleCompleted={onToggleCompleted}
+              onRateAndComplete={onRateAndComplete}
+              onSkipReview={onSkipReview}
+              onUnmarkCompleted={onUnmarkCompleted}
             />
           ))}
         </div>
@@ -475,7 +587,9 @@ interface ProblemRowProps {
   progressEntry?: ProgressEntry;
   loaded: boolean;
   onSaveProgress: (problemId: string, elapsedSec: number, completed?: boolean) => Promise<void>;
-  onToggleCompleted: (problemId: string, elapsedSec: number) => Promise<void>;
+  onRateAndComplete: (problemId: string, elapsedSec: number, rating: Rating, notes: string) => Promise<void>;
+  onSkipReview: (problemId: string, elapsedSec: number, notes: string) => Promise<void>;
+  onUnmarkCompleted: (problemId: string, elapsedSec: number) => Promise<void>;
 }
 
 function ProblemRow({
@@ -483,8 +597,12 @@ function ProblemRow({
   progressEntry,
   loaded,
   onSaveProgress,
-  onToggleCompleted,
+  onRateAndComplete,
+  onSkipReview,
+  onUnmarkCompleted,
 }: ProblemRowProps) {
+  const [showDialog, setShowDialog] = useState(false);
+
   const handlePause = useCallback(
     (elapsedSec: number) => {
       onSaveProgress(problem.id, elapsedSec);
@@ -494,6 +612,11 @@ function ProblemRow({
 
   const sw = useNeetcodeStopwatch(problem.id, problem.difficulty, handlePause);
   const isCompleted = progressEntry?.completed ?? false;
+  const entry = progressEntry ?? EMPTY_PROGRESS;
+
+  const reviewStatus: ReviewStatus = isCompleted
+    ? getReviewStatus(entry.nextReviewDate, entry.mastered)
+    : "none";
 
   // Seed elapsed from DB when progress loads (only if localStorage is empty)
   useEffect(() => {
@@ -508,93 +631,139 @@ function ProblemRow({
     onSaveProgress(problem.id, 0, false);
   }, [sw, problem.id, onSaveProgress]);
 
-  const handleToggleDone = useCallback(() => {
-    onToggleCompleted(problem.id, sw.elapsed);
-  }, [onToggleCompleted, problem.id, sw.elapsed]);
+  const handleCheckClick = useCallback(() => {
+    if (isCompleted) {
+      onUnmarkCompleted(problem.id, sw.elapsed);
+    } else {
+      setShowDialog(true);
+    }
+  }, [isCompleted, onUnmarkCompleted, problem.id, sw.elapsed]);
+
+  const bestTime = sw.elapsed > 0 ? formatTime(sw.elapsed) : null;
 
   return (
-    <div
-      className={cn(
-        "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
-        isCompleted && "opacity-60"
-      )}
-    >
-      {/* Done button */}
-      <button
-        onClick={handleToggleDone}
+    <div>
+      <div
         className={cn(
-          "shrink-0 rounded p-0.5 transition-colors",
-          isCompleted
-            ? "text-green-400"
-            : "text-muted-foreground/40 hover:text-muted-foreground"
+          "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+          isCompleted && reviewStatus !== "due" && reviewStatus !== "overdue" && "opacity-60"
         )}
-        title={isCompleted ? "Mark incomplete" : "Mark complete"}
       >
-        <CheckCircle className="h-4 w-4" />
-      </button>
-
-      {/* Problem link */}
-      <a
-        href={problem.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={cn(
-          "flex-1 truncate hover:text-primary hover:underline transition-colors",
-          isCompleted && "line-through"
-        )}
-        title={problem.name}
-      >
-        {problem.name}
-        <ExternalLink className="ml-1 inline h-3 w-3 opacity-40" />
-      </a>
-
-      {/* Difficulty badge */}
-      <DifficultyBadge difficulty={problem.difficulty.toLowerCase()} className="shrink-0" />
-
-      {/* Inline stopwatch */}
-      <div className="group/sw flex shrink-0 items-center gap-0.5">
-        <span
+        {/* Done button with status-aware icon */}
+        <button
+          onClick={handleCheckClick}
           className={cn(
-            "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-mono tabular-nums",
-            sw.overTime
-              ? "bg-red-600/20 text-red-400"
-              : sw.running
-                ? "bg-blue-600/20 text-blue-400"
-                : "text-muted-foreground"
+            "shrink-0 rounded p-0.5 transition-colors",
+            !isCompleted && "text-muted-foreground/40 hover:text-muted-foreground",
+            isCompleted && reviewStatus === "mastered" && "text-green-400",
+            isCompleted && reviewStatus === "overdue" && "text-red-400",
+            isCompleted && reviewStatus === "due" && "text-orange-400",
+            isCompleted && reviewStatus === "scheduled" && "text-green-400",
+            isCompleted && reviewStatus === "none" && "text-green-400",
           )}
+          title={
+            isCompleted
+              ? reviewStatus === "due" || reviewStatus === "overdue"
+                ? "Due for review — click to unmark"
+                : reviewStatus === "mastered"
+                  ? "Mastered — click to unmark"
+                  : "Mark incomplete"
+              : "Mark complete"
+          }
         >
-          <Clock className="h-3 w-3" />
-          {formatTime(sw.elapsed)}
-        </span>
-        <div className={cn(
-          "flex items-center gap-0.5 transition-opacity",
-          sw.running ? "opacity-100" : "opacity-0 group-hover/sw:opacity-100"
-        )}>
-          <button
-            onClick={sw.toggle}
+          {isCompleted ? (
+            <StatusIcon status={reviewStatus} completed={isCompleted} />
+          ) : (
+            <CheckCircle className="h-4 w-4" />
+          )}
+        </button>
+
+        {/* Problem link */}
+        <a
+          href={problem.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cn(
+            "flex-1 truncate hover:text-primary hover:underline transition-colors",
+            isCompleted && reviewStatus !== "due" && reviewStatus !== "overdue" && "line-through"
+          )}
+          title={problem.name}
+        >
+          {problem.name}
+          <ExternalLink className="ml-1 inline h-3 w-3 opacity-40" />
+        </a>
+
+        {/* Difficulty badge */}
+        <DifficultyBadge difficulty={problem.difficulty.toLowerCase()} className="shrink-0" />
+
+        {/* Inline stopwatch */}
+        <div className="group/sw flex shrink-0 items-center gap-0.5">
+          <span
             className={cn(
-              "rounded p-0.5 transition-colors",
-              sw.running
-                ? "text-yellow-400 hover:bg-yellow-600/20"
-                : "text-green-400 hover:bg-green-600/20"
+              "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-mono tabular-nums",
+              sw.overTime
+                ? "bg-red-600/20 text-red-400"
+                : sw.running
+                  ? "bg-blue-600/20 text-blue-400"
+                  : "text-muted-foreground"
             )}
-            title={sw.running ? "Pause" : "Start"}
           >
-            {sw.running ? (
-              <Pause className="h-3 w-3" />
-            ) : (
-              <Play className="h-3 w-3" />
-            )}
-          </button>
-          <button
-            onClick={handleReset}
-            className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            title="Reset"
-          >
-            <RotateCcw className="h-3 w-3" />
-          </button>
+            <Clock className="h-3 w-3" />
+            {formatTime(sw.elapsed)}
+          </span>
+          <div className={cn(
+            "flex items-center gap-0.5 transition-opacity",
+            sw.running ? "opacity-100" : "opacity-0 group-hover/sw:opacity-100"
+          )}>
+            <button
+              onClick={sw.toggle}
+              className={cn(
+                "rounded p-0.5 transition-colors",
+                sw.running
+                  ? "text-yellow-400 hover:bg-yellow-600/20"
+                  : "text-green-400 hover:bg-green-600/20"
+              )}
+              title={sw.running ? "Pause" : "Start"}
+            >
+              {sw.running ? (
+                <Pause className="h-3 w-3" />
+              ) : (
+                <Play className="h-3 w-3" />
+              )}
+            </button>
+            <button
+              onClick={handleReset}
+              className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title="Reset"
+            >
+              <RotateCcw className="h-3 w-3" />
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Review dialog */}
+      {showDialog && (
+        <ReviewDialog
+          problemName={problem.name}
+          difficulty={problem.difficulty.toLowerCase()}
+          attempts={entry.reviewCount + 1}
+          bestTime={bestTime}
+          isFirstSolve={entry.reviewCount === 0}
+          currentIntervalDays={entry.intervalDays}
+          masteryStreak={entry.masteryStreak}
+          notes={entry.notes}
+          onRate={(rating, notes) => {
+            onRateAndComplete(problem.id, sw.elapsed, rating, notes);
+            setShowDialog(false);
+          }}
+          onSkip={(notes) => {
+            onSkipReview(problem.id, sw.elapsed, notes);
+            setShowDialog(false);
+          }}
+          onClose={() => setShowDialog(false)}
+        />
+      )}
     </div>
   );
 }

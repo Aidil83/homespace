@@ -164,16 +164,24 @@ model DailyChallengeCompletion {
 }
 
 model NeetcodeProgress {
-  id         String   @id @default(uuid()) @db.Uuid
-  userId     String   @map("user_id") @db.Uuid
-  problemId  String   @map("problem_id")
-  elapsedSec Int      @default(0) @map("elapsed_sec")
-  completed  Boolean  @default(false)
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  problemId      String    @map("problem_id")
+  elapsedSec     Int       @default(0) @map("elapsed_sec")
+  completed      Boolean   @default(false)
+  lastRating     Int?      @map("last_rating")
+  intervalDays   Int       @default(0) @map("interval_days")
+  reviewCount    Int       @default(0) @map("review_count")
+  nextReviewDate DateTime? @map("next_review_date") @db.Date
+  mastered       Boolean   @default(false)
+  masteryStreak  Int       @default(0) @map("mastery_streak")
+  notes          String?
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@unique([userId, problemId])
   @@index([userId])
+  @@index([userId, nextReviewDate])
   @@map("neetcode_progress")
 }
 
